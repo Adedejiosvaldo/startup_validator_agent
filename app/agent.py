@@ -95,7 +95,7 @@ mvp_agent = LlmAgent(
 # Scoring Agent
 scoring_agent = LlmAgent(
     name="startup_scoring_agent",
-    model="gemini-2.5-flash-exp",
+    model="gemini-2.5-flash",
     description="""
     A scoring agent that evaluates startup ideas based on predefined metrics such
     as market size, competition, feasibility, scalability, and uniqueness.
@@ -116,7 +116,7 @@ scoring_agent = LlmAgent(
 # Investor Agent
 investor_agent = LlmAgent(
     name="startup_investor_agent",
-    model="gemini-2.5-flash-exp",
+    model="gemini-2.5-flash",
     description="""
     An investor simulation agent that evaluates the startup from the lens of a VC,
     giving feedback on investment potential and highlighting red or green flags.
@@ -133,7 +133,7 @@ investor_agent = LlmAgent(
 # Possible Product Market Fit Agent
 pmf_agent = LlmAgent(
     name="startup_pmf_agent",
-    model="gemini-2.5-flash-exp",
+    model="gemini-2.5-flash",
     planner=BuiltInPlanner(
         thinking_config=genai_types.ThinkingConfig(include_thoughts=True)
     ),
@@ -154,7 +154,7 @@ pmf_agent = LlmAgent(
 # customer painpoint
 painpoint_agent = LlmAgent(
     name="startup_customer_painpoint_agent",
-    model="gemini-2.5-flash-exp",
+    model="gemini-2.5-flash",
     planner=BuiltInPlanner(
         thinking_config=genai_types.ThinkingConfig(include_thoughts=True)
     ),
@@ -172,12 +172,22 @@ painpoint_agent = LlmAgent(
 )
 
 
-startup_validator_pipeline = SequentialAgent()
+startup_validator_pipeline = SequentialAgent(
+    name="startup_validator_pipeline",
+    description="""
+    A pipeline that validates startup ideas through various lenses, including
+    customer pain points, product-market fit, and investment potential.
+    """,
+    sub_agents=[
+        idea_critique_agent,
+        market_research_agent,
+        painpoint_agent,
+        pmf_agent,
+        investor_agent,
+        mvp_agent,
+        product_dev_agent,
+        scoring_agent,
+    ],
+)
 
-# root_agent = LlmAgent(
-#     name="basic_search_agent",
-#     model="gemini-2.0-flash-exp",
-#     description="A basic search agent that can answer questions using Google Search.",
-#     tools=[google_search],
-#     instruction="You are an expert researcher. You always stick to the facts and never make up information. If you don't know the answer, you will say 'I don't know'. You will always use Google Search to find the answer to the question.",
-# )
+root_agent = startup_validator_pipeline
