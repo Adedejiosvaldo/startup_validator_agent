@@ -1,13 +1,15 @@
 import datetime
 from zoneinfo import ZoneInfo
-from google.adk.agents import LlmAgent
+from google.adk.agents import LlmAgent, SequentialAgent
 from google.adk.tools import google_search
+from google.adk.planners import BuiltInPlanner
+from google.genai import types as genai_types
 
 # MarketResearch Agent
 # This agent is responsible for conducting market research, gathering data on competitors, and identifying trends in the industry.
 market_research_agent = LlmAgent(
     name="startup_market_research_agent",
-    model="gemini-2.5-flash-exp",
+    model="gemini-2.5-flash",
     description="""
     A specialized agent for conducting in-depth market research to support startup idea validation.
     It gathers and analyzes data on competitors, industry trends, venture capital interest, and
@@ -35,8 +37,11 @@ market_research_agent = LlmAgent(
 
 # Idea Critique Agent
 idea_critique_agent = LlmAgent(
+    planner=BuiltInPlanner(
+        thinking_config=genai_types.ThinkingConfig(include_thoughts=True)
+    ),
     name="startup_idea_critique_agent",
-    model="gemini-2.5-flash-exp",
+    model="gemini-2.5-flash",
     description="""
     An agent that critically evaluates startup ideas based on innovation,
     feasibility, market relevance, and differentiation. Provides constructive
@@ -56,7 +61,7 @@ idea_critique_agent = LlmAgent(
 # Product Development Agent
 product_dev_agent = LlmAgent(
     name="startup_product_development_agent",
-    model="gemini-2.5-flash-exp",
+    model="gemini-2.5-flash",
     description="""
     A product development agent that transforms validated startup ideas
     into clear product visions, roadmaps, and feature sets.
@@ -73,7 +78,7 @@ product_dev_agent = LlmAgent(
 # MVP Agent
 mvp_agent = LlmAgent(
     name="startup_mvp_agent",
-    model="gemini-2.5-flash-exp",
+    model="gemini-2.5-flash",
     description="""
     An MVP planning agent that helps founders design the simplest version
     of their product that can test key assumptions and deliver core value.
@@ -88,13 +93,87 @@ mvp_agent = LlmAgent(
 )
 
 # Scoring Agent
+scoring_agent = LlmAgent(
+    name="startup_scoring_agent",
+    model="gemini-2.5-flash-exp",
+    description="""
+    A scoring agent that evaluates startup ideas based on predefined metrics such
+    as market size, competition, feasibility, scalability, and uniqueness.
+    """,
+    instruction="""
+    Score startup ideas from 1 to 10 across these dimensions:
+    - Market Potential
+    - Feasibility of Execution
+    - Competitive Advantage
+    - Founder's Alignment/Strength
+    - Scalability
+    Provide a rationale for each score.
+    """,
+    tools=[google_search],
+)
+
 
 # Investor Agent
+investor_agent = LlmAgent(
+    name="startup_investor_agent",
+    model="gemini-2.5-flash-exp",
+    description="""
+    An investor simulation agent that evaluates the startup from the lens of a VC,
+    giving feedback on investment potential and highlighting red or green flags.
+    """,
+    instruction="""
+    You are a seasoned venture capitalist. Evaluate startup ideas by:
+    - Identifying investable signals
+    - Pointing out deal-breaking flaws
+    - Estimating the TAM and exit potential
+    - Giving a mock "invest or pass" verdict with reasons
+    """,
+)
 
 # Possible Product Market Fit Agent
+pmf_agent = LlmAgent(
+    name="startup_pmf_agent",
+    model="gemini-2.5-flash-exp",
+    planner=BuiltInPlanner(
+        thinking_config=genai_types.ThinkingConfig(include_thoughts=True)
+    ),
+    description="""
+    An agent that analyzes whether a proposed startup idea is likely to achieve
+    product-market fit based on user needs, demand signals, and solution fit.
+    """,
+    instruction="""
+    Determine if there is strong alignment between the target user’s pain points and the proposed solution.
+    - Identify demand signals
+    - Check how differentiated the solution is
+    - Assess willingness to pay or adopt
+    Provide a product-market fit confidence rating (Low, Medium, High)
+    """,
+)
 
 
 # customer painpoint
+painpoint_agent = LlmAgent(
+    name="startup_customer_painpoint_agent",
+    model="gemini-2.5-flash-exp",
+    planner=BuiltInPlanner(
+        thinking_config=genai_types.ThinkingConfig(include_thoughts=True)
+    ),
+    description="""
+    A customer-centric agent that identifies core pain points experienced by the
+    target audience relevant to the startup idea.
+    """,
+    instruction="""
+    Extract and analyze customer pain points from the idea and market context.
+    Use empathy-driven reasoning to:
+    - Identify underserved needs
+    - Pinpoint frustrations or inefficiencies
+    - Suggest ways the product could directly address these issues
+    """,
+)
+
+
+startup_validator_pipeline = SequentialAgent()
+
 # root_agent = LlmAgent(
 #     name="basic_search_agent",
 #     model="gemini-2.0-flash-exp",
