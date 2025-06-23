@@ -116,10 +116,3 @@ npm run dev  # for frontend (if using Next.js/SvelteKit)
 
 MIT License © 2025 Joseph
 
----
-
-## 🤝 Contributing
-
-PRs are welcome! If you’d like to suggest new tools, models, or UX flows, feel free to fork or raise an issue.
-
-```
