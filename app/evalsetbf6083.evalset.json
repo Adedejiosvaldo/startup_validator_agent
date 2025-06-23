@@ -1,0 +1,61 @@
+{
+  "eval_set_id": "evalsetbf6083",
+  "name": "evalsetbf6083",
+  "description": null,
+  "eval_cases": [
+    {
+      "eval_id": "case99c003",
+      "conversation": [
+        {
+          "invocation_id": "e-abf91181-d2eb-4b1a-85f5-f28e54972ef6",
+          "user_content": {
+            "parts": [
+              {
+                "video_metadata": null,
+                "thought": null,
+                "inline_data": null,
+                "file_data": null,
+                "thought_signature": null,
+                "code_execution_result": null,
+                "executable_code": null,
+                "function_call": null,
+                "function_response": null,
+                "text": "Time"
+              }
+            ],
+            "role": "user"
+          },
+          "final_response": {
+            "parts": [
+              {
+                "video_metadata": null,
+                "thought": null,
+                "inline_data": null,
+                "file_data": null,
+                "thought_signature": null,
+                "code_execution_result": null,
+                "executable_code": null,
+                "function_call": null,
+                "function_response": null,
+                "text": "It is Monday, June 23, 2025 at 10:19:05 AM UTC.\n"
+              }
+            ],
+            "role": null
+          },
+          "intermediate_data": {
+            "tool_uses": [],
+            "intermediate_responses": []
+          },
+          "creation_timestamp": 1750673944.439519
+        }
+      ],
+      "session_input": {
+        "app_name": "app",
+        "user_id": "user",
+        "state": {}
+      },
+      "creation_timestamp": 1750674153.7920506
+    }
+  ],
+  "creation_timestamp": 1750674150.3788154
+}
