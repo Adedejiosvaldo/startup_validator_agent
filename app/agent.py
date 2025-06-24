@@ -4,6 +4,44 @@ from google.adk.agents import LlmAgent, SequentialAgent
 from google.adk.tools import google_search
 from google.adk.planners import BuiltInPlanner
 from google.genai import types as genai_types
+from google.adk.agents.callback_context import CallbackContext
+from pydantic import BaseModel, Field
+from typing import Literal
+
+# --- Structured Output Models ---
+class ScoringResult(BaseModel):
+    """Model for the output of the scoring agent."""
+    market_potential: int = Field(description="Score for market potential (1-10)")
+    feasibility: int = Field(description="Score for feasibility of execution (1-10)")
+    competition: int = Field(description="Score for competitive advantage (1-10)")
+    founder_fit: int = Field(description="Score for founder's alignment and strength (1-10)")
+    scalability: int = Field(description="Score for scalability (1-10)")
+    rationale: str = Field(description="Rationale for the scores.")
+
+class InvestorVerdict(BaseModel):
+    """Model for the output of the investor agent."""
+    verdict: Literal["invest", "pass"] = Field(description="The investment decision.")
+    reasoning: str = Field(description="The reasoning behind the verdict.")
+
+class PmfConfidence(BaseModel):
+    """Model for the output of the PMF agent."""
+    confidence: Literal["Low", "Medium", "High"] = Field(description="The product-market fit confidence rating.")
+    analysis: str = Field(description="The analysis behind the confidence rating.")
+
+
+# --- Callbacks ---
+def collect_validation_results_callback(callback_context: CallbackContext) -> None:
+    """Collects the structured outputs from the validation agents."""
+    agent_name = callback_context.agent.name
+    output = callback_context.latest_output
+    
+    if not isinstance(output, BaseModel):
+        return
+
+    validation_results = callback_context.state.get("validation_results", {})
+    validation_results[agent_name] = output.dict()
+    callback_context.state["validation_results"] = validation_results
+
 
 # MarketResearch Agent
 # This agent is responsible for conducting market research, gathering data on competitors, and identifying trends in the industry.
@@ -110,6 +148,8 @@ scoring_agent = LlmAgent(
     Provide a rationale for each score.
     """,
     tools=[google_search],
+    output_schema=ScoringResult,
+    after_agent_callback=collect_validation_results_callback,
 )
 
 
@@ -128,6 +168,8 @@ investor_agent = LlmAgent(
     - Estimating the TAM and exit potential
     - Giving a mock "invest or pass" verdict with reasons
     """,
+    output_schema=InvestorVerdict,
+    after_agent_callback=collect_validation_results_callback,
 )
 
 # Possible Product Market Fit Agent
@@ -148,6 +190,8 @@ pmf_agent = LlmAgent(
     - Assess willingness to pay or adopt
     Provide a product-market fit confidence rating (Low, Medium, High)
     """,
+    output_schema=PmfConfidence,
+    after_agent_callback=collect_validation_results_callback,
 )
 
 
@@ -190,4 +234,48 @@ startup_validator_pipeline = SequentialAgent(
     ],
 )
 
-root_agent = startup_validator_pipeline
+
+# Summary Agent
+summary_agent = LlmAgent(
+    name="startup_summary_agent",
+    model="gemini-2.5-flash",
+    description="""
+    An agent that takes the outputs from all validation agents and synthesizes
+    them into a comprehensive, structured report for easy decision-making.
+    """,
+    instruction="""
+    You are a business analyst. Consolidate all the feedback from the validation pipeline into a single, well-structured report that includes:
+
+    ## Executive Summary
+    - Overall recommendation (Pursue/Refine/Pivot/Abandon)
+    - Key strengths and critical weaknesses
+
+    ## Market Analysis
+    - Market size and opportunity
+    - Competitive landscape summary
+    - Key trends and insights
+
+    ## Product & Strategy
+    - Core value proposition
+    - MVP recommendations
+    - Product-market fit assessment
+
+    ## Investment Perspective
+    - Funding potential and investor appeal
+    - Key risks and mitigation strategies
+
+    ## Scoring Summary
+    - Overall score and breakdown by category
+    - Critical success factors
+
+    ## Next Steps
+    - Immediate action items
+    - Key assumptions to validate
+
+    Format the output as a professional business report with clear sections and actionable insights.
+    """,
+    sub_agents=[startup_validator_pipeline],
+)
+
+
+root_agent = summary_agent
