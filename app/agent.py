@@ -378,55 +378,78 @@ summary_agent = LlmAgent(
     An agent that synthesizes all validation data into a comprehensive, final report.
     """,
     instruction="""
-    Transform the comprehensive validation data into a polished, professional startup validation report.
+    You are a business analyst creating a comprehensive startup validation report. You have access to structured validation data in the session state.
 
-    ---
-    ### INPUT DATA
-    * Validation Results: `{validation_results}`
-    * All Validation Outputs: `{all_validation_outputs}`
-    * Enhanced Analysis: `{enhanced_analysis}`
+    **CRITICAL: Access the following data from the session state:**
+    - `validation_results` contains structured outputs from scoring, investor, and PMF agents
+    - `all_validation_outputs` contains all agent outputs (text and structured)
 
-    ---
-    ### REPORT STRUCTURE
-    Generate a comprehensive startup validation report with the following sections:
+    **SPECIFIC DATA TO EXTRACT:**
+    1. From `startup_scoring_agent`: market_potential, feasibility, competition, founder_fit, scalability scores and rationale
+    2. From `startup_investor_agent`: verdict (invest/pass) and reasoning
+    3. From `startup_pmf_agent`: confidence (Low/Medium/High) and analysis
+    4. From `startup_mvp_agent`: MVP recommendations and implementation approach
+    5. From `startup_market_research_agent`: market insights and competitive analysis
+    6. From `startup_idea_critique_agent`: constructive feedback and improvement suggestions
+    7. From `startup_customer_painpoint_agent`: pain point analysis
+
+    Generate a comprehensive startup validation report with these sections:
 
     ## Executive Summary
-    - Overall recommendation (Pursue/Refine/Pivot/Abandon)
-    - Key strengths and critical weaknesses
+    - Overall recommendation (Pursue/Refine/Pivot/Abandon) based on all analyses
+    - Key strengths and critical weaknesses identified
     - Confidence level in the recommendation
 
-    ## Validation Scores
+    ## Validation Scores (Extract from startup_scoring_agent)
     - Market Potential: [score]/10
     - Feasibility: [score]/10
     - Competitive Advantage: [score]/10
     - Founder Fit: [score]/10
     - Scalability: [score]/10
-    - **Overall Score: [average]/10**
+    - **Overall Score: [calculate average]/10**
+    - **Rationale:** [include scoring rationale]
 
-    ## Investment Perspective
-    - VC Verdict: [Invest/Pass]
-    - Investment reasoning and key factors
+    ## Investment Perspective (Extract from startup_investor_agent)
+    - **VC Verdict:** [Invest/Pass]
+    - **Investment Reasoning:** [detailed reasoning from investor agent]
+    - **Key Investment Factors:** [summarise key points]
 
-    ## Product-Market Fit Analysis
-    - PMF Confidence: [Low/Medium/High]
-    - Demand signals and market alignment
+    ## Product-Market Fit Analysis (Extract from startup_pmf_agent)
+    - **PMF Confidence:** [Low/Medium/High]
+    - **Analysis:** [detailed PMF analysis]
+    - **Demand Signals:** [market alignment insights]
 
-    ## Market Intelligence
-    - Competitive landscape insights
-    - Market opportunities and threats
-    - Industry trends and dynamics
+    ## MVP Strategy (Extract from startup_mvp_agent)
+    - **Core MVP Features:** [list key features recommended]
+    - **Implementation Approach:** [development recommendations]
+    - **Testing Strategy:** [hypothesis validation approach]
 
-    ## Strategic Recommendations
-    - Immediate next steps
-    - Key assumptions to validate
-    - Risk mitigation strategies
+    ## Market Intelligence (Extract from startup_market_research_agent)
+    - **Competitive Landscape:** [competitor analysis]
+    - **Market Opportunities:** [identified opportunities]
+    - **Industry Trends:** [relevant trends and dynamics]
+    - **Market Gaps:** [whitespace opportunities]
 
-    ## Implementation Roadmap
-    - MVP recommendations
-    - Product development priorities
-    - Go-to-market approach
+    ## Customer Pain Points (Extract from startup_customer_painpoint_agent)
+    - **Identified Pain Points:** [key customer frustrations]
+    - **Solution Alignment:** [how product addresses pain points]
+    - **Market Demand:** [evidence of need]
 
-    Format as a professional business report with clear headings, bullet points, and actionable insights.
+    ## Strategic Feedback (Extract from startup_idea_critique_agent)
+    - **Constructive Feedback:** [mentor insights]
+    - **Business Model Suggestions:** [improvement recommendations]
+    - **Risk Warnings:** [potential challenges identified]
+
+    ## Next Steps & Recommendations
+    - **Immediate Action Items:** [prioritised next steps]
+    - **Key Assumptions to Validate:** [critical hypotheses to test]
+    - **Risk Mitigation:** [strategies to address identified risks]
+
+    **FORMATTING REQUIREMENTS:**
+    - Use clear headings and bullet points
+    - Include actual data from the validation results
+    - Provide actionable insights and specific recommendations
+    - Ensure professional business report formatting
     """,
     output_key="final_startup_report",
 )
