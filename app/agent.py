@@ -1,32 +1,61 @@
-import datetime
-from zoneinfo import ZoneInfo
-from google.adk.agents import LlmAgent, SequentialAgent
-from google.adk.tools import google_search
-from google.adk.planners import BuiltInPlanner
-from google.genai import types as genai_types
-from google.adk.agents.callback_context import CallbackContext
-from pydantic import BaseModel, Field
+import logging
+from collections.abc import AsyncGenerator
 from typing import Literal
+
+from google.adk.agents import BaseAgent, LlmAgent, LoopAgent, SequentialAgent
+from google.adk.agents.callback_context import CallbackContext
+from google.adk.agents.invocation_context import InvocationContext
+from google.adk.events import Event, EventActions
+from google.adk.planners import BuiltInPlanner
+from google.adk.tools import google_search
+from google.adk.tools.agent_tool import AgentTool
+from google.genai import types as genai_types
+from pydantic import BaseModel, Field
+
 
 # --- Structured Output Models ---
 class ScoringResult(BaseModel):
     """Model for the output of the scoring agent."""
+
     market_potential: int = Field(description="Score for market potential (1-10)")
     feasibility: int = Field(description="Score for feasibility of execution (1-10)")
     competition: int = Field(description="Score for competitive advantage (1-10)")
-    founder_fit: int = Field(description="Score for founder's alignment and strength (1-10)")
+    founder_fit: int = Field(
+        description="Score for founder's alignment and strength (1-10)"
+    )
     scalability: int = Field(description="Score for scalability (1-10)")
     rationale: str = Field(description="Rationale for the scores.")
 
+
 class InvestorVerdict(BaseModel):
     """Model for the output of the investor agent."""
+
     verdict: Literal["invest", "pass"] = Field(description="The investment decision.")
     reasoning: str = Field(description="The reasoning behind the verdict.")
 
+
 class PmfConfidence(BaseModel):
     """Model for the output of the PMF agent."""
-    confidence: Literal["Low", "Medium", "High"] = Field(description="The product-market fit confidence rating.")
+
+    confidence: Literal["Low", "Medium", "High"] = Field(
+        description="The product-market fit confidence rating."
+    )
     analysis: str = Field(description="The analysis behind the confidence rating.")
+
+
+class ValidationFeedback(BaseModel):
+    """Model for providing evaluation feedback on validation quality."""
+
+    grade: Literal["pass", "fail"] = Field(
+        description="Evaluation result. 'pass' if validation is sufficient, 'fail' if needs improvement."
+    )
+    comment: str = Field(
+        description="Detailed explanation of the evaluation, highlighting strengths and/or weaknesses."
+    )
+    improvement_areas: list[str] | None = Field(
+        default=None,
+        description="List of specific areas that need improvement. Should be null or empty if grade is 'pass'.",
+    )
 
 
 # --- Callbacks ---
@@ -34,13 +63,65 @@ def collect_validation_results_callback(callback_context: CallbackContext) -> No
     """Collects the structured outputs from the validation agents."""
     agent_name = callback_context.agent.name
     output = callback_context.latest_output
-    
+
     if not isinstance(output, BaseModel):
         return
 
     validation_results = callback_context.state.get("validation_results", {})
     validation_results[agent_name] = output.dict()
     callback_context.state["validation_results"] = validation_results
+
+
+def enhance_validation_callback(callback_context: CallbackContext) -> None:
+    """Enhanced callback that tracks validation completeness and quality."""
+    agent_name = callback_context.agent.name
+    output = callback_context.latest_output
+
+    # Track all outputs, structured and unstructured
+    all_results = callback_context.state.get("all_validation_outputs", {})
+
+    if isinstance(output, BaseModel):
+        all_results[agent_name] = {
+            "type": "structured",
+            "data": output.dict(),
+            "agent_name": agent_name,
+        }
+        # Also update the validation_results for structured outputs
+        validation_results = callback_context.state.get("validation_results", {})
+        validation_results[agent_name] = output.dict()
+        callback_context.state["validation_results"] = validation_results
+    else:
+        # Handle text outputs from agents like market_research, idea_critique, etc.
+        all_results[agent_name] = {
+            "type": "text",
+            "data": str(output) if output else "",
+            "agent_name": agent_name,
+        }
+
+    callback_context.state["all_validation_outputs"] = all_results
+
+
+# --- Custom Agent for Loop Control ---
+class ValidationQualityChecker(BaseAgent):
+    """Checks validation quality and escalates to stop the loop if grade is 'pass'."""
+
+    def __init__(self, name: str):
+        super().__init__(name=name)
+
+    async def _run_async_impl(
+        self, ctx: InvocationContext
+    ) -> AsyncGenerator[Event, None]:
+        evaluation_result = ctx.session.state.get("validation_evaluation")
+        if evaluation_result and evaluation_result.get("grade") == "pass":
+            logging.info(
+                f"[{self.name}] Validation evaluation passed. Escalating to stop loop."
+            )
+            yield Event(author=self.name, actions=EventActions(escalate=True))
+        else:
+            logging.info(
+                f"[{self.name}] Validation evaluation failed or not found. Loop will continue."
+            )
+            yield Event(author=self.name)
 
 
 # MarketResearch Agent
@@ -70,6 +151,7 @@ market_research_agent = LlmAgent(
     Always rely on Google Search for the most up-to-date market information, and make sure to extract keywords that best represent the core of the idea.
     """,
     tools=[google_search],
+    after_agent_callback=enhance_validation_callback,
 )
 
 
@@ -93,6 +175,7 @@ idea_critique_agent = LlmAgent(
     - Insights into potential competitive or execution risks
     Analyze based on viability, novelty, and scalability.
     """,
+    after_agent_callback=enhance_validation_callback,
 )
 
 
@@ -111,6 +194,7 @@ product_dev_agent = LlmAgent(
     - Map out a phased development roadmap
     - Recommend tech stacks or approaches where needed
     """,
+    after_agent_callback=enhance_validation_callback,
 )
 
 # MVP Agent
@@ -128,6 +212,7 @@ mvp_agent = LlmAgent(
     - Ensure the MVP is aligned with the target audience and value proposition
     """,
     tools=[google_search],
+    after_agent_callback=enhance_validation_callback,
 )
 
 # Scoring Agent
@@ -147,9 +232,9 @@ scoring_agent = LlmAgent(
     - Scalability
     Provide a rationale for each score.
     """,
-    tools=[google_search],
+    # tools=[google_search],
     output_schema=ScoringResult,
-    after_agent_callback=collect_validation_results_callback,
+    after_agent_callback=enhance_validation_callback,
 )
 
 
@@ -169,7 +254,7 @@ investor_agent = LlmAgent(
     - Giving a mock "invest or pass" verdict with reasons
     """,
     output_schema=InvestorVerdict,
-    after_agent_callback=collect_validation_results_callback,
+    after_agent_callback=enhance_validation_callback,
 )
 
 # Possible Product Market Fit Agent
@@ -191,7 +276,7 @@ pmf_agent = LlmAgent(
     Provide a product-market fit confidence rating (Low, Medium, High)
     """,
     output_schema=PmfConfidence,
-    after_agent_callback=collect_validation_results_callback,
+    after_agent_callback=enhance_validation_callback,
 )
 
 
@@ -213,15 +298,133 @@ painpoint_agent = LlmAgent(
     - Pinpoint frustrations or inefficiencies
     - Suggest ways the product could directly address these issues
     """,
+    after_agent_callback=enhance_validation_callback,
 )
 
 
-startup_validator_pipeline = SequentialAgent(
-    name="startup_validator_pipeline",
-    description="""
-    A pipeline that validates startup ideas through various lenses, including
-    customer pain points, product-market fit, and investment potential.
+# Validation Quality Evaluator Agent
+validation_evaluator = LlmAgent(
+    model="gemini-2.0-flash",
+    name="validation_evaluator",
+    description="Critically evaluates the quality and completeness of startup validation.",
+    instruction="""
+    You are a meticulous startup validation analyst. Your task is to evaluate the quality
+    and completeness of the validation analysis contained in 'all_validation_outputs'.
+
+    **CRITICAL RULES:**
+    1. Assess the depth and quality of each validation component
+    2. Check for consistency across different analyses
+    3. Identify gaps in the validation coverage
+    4. Ensure all key startup validation areas are adequately addressed
+
+    Focus on evaluating:
+    - Completeness: Are all critical aspects covered?
+    - Depth: Is the analysis thorough enough for decision-making?
+    - Consistency: Do the analyses align with each other?
+    - Quality: Are insights actionable and well-reasoned?
+
+    If you find significant gaps or quality issues, assign a grade of "fail" and specify
+    improvement areas. If the validation is comprehensive and high-quality, grade "pass".
+
+    Your response must be a single, raw JSON object validating against the 'ValidationFeedback' schema.
     """,
+    output_schema=ValidationFeedback,
+    disallow_transfer_to_parent=True,
+    disallow_transfer_to_peers=True,
+    output_key="validation_evaluation",
+)
+
+# Enhanced Analysis Agent
+enhanced_analysis_agent = LlmAgent(
+    model="gemini-2.0-flash",
+    name="enhanced_analysis_agent",
+    description="Performs additional analysis to address validation gaps.",
+    planner=BuiltInPlanner(
+        thinking_config=genai_types.ThinkingConfig(include_thoughts=True)
+    ),
+    instruction="""
+    You are a specialist startup analyst executing an enhancement pass.
+    You have been activated because the validation was graded as 'fail'.
+
+    1. Review the 'validation_evaluation' state key to understand the feedback and required improvements.
+    2. Review the existing 'all_validation_outputs' to understand what has been done.
+    3. Address EVERY improvement area listed in the evaluation feedback.
+    4. Provide additional analysis, insights, and recommendations to fill the gaps.
+    5. Use the Google Search tool if you need current market data or trends.
+
+    Your output should directly address the identified weaknesses and provide the missing analysis.
+    """,
+    tools=[google_search],
+    output_key="enhanced_analysis",
+    after_agent_callback=enhance_validation_callback,
+)
+
+# Summary Agent
+summary_agent = LlmAgent(
+    name="startup_summary_agent",
+    model="gemini-2.0-flash",
+    include_contents="none",
+    description="""
+    An agent that synthesizes all validation data into a comprehensive, final report.
+    """,
+    instruction="""
+    Transform the comprehensive validation data into a polished, professional startup validation report.
+
+    ---
+    ### INPUT DATA
+    * Validation Results: `{validation_results}`
+    * All Validation Outputs: `{all_validation_outputs}`
+    * Enhanced Analysis: `{enhanced_analysis}`
+
+    ---
+    ### REPORT STRUCTURE
+    Generate a comprehensive startup validation report with the following sections:
+
+    ## Executive Summary
+    - Overall recommendation (Pursue/Refine/Pivot/Abandon)
+    - Key strengths and critical weaknesses
+    - Confidence level in the recommendation
+
+    ## Validation Scores
+    - Market Potential: [score]/10
+    - Feasibility: [score]/10
+    - Competitive Advantage: [score]/10
+    - Founder Fit: [score]/10
+    - Scalability: [score]/10
+    - **Overall Score: [average]/10**
+
+    ## Investment Perspective
+    - VC Verdict: [Invest/Pass]
+    - Investment reasoning and key factors
+
+    ## Product-Market Fit Analysis
+    - PMF Confidence: [Low/Medium/High]
+    - Demand signals and market alignment
+
+    ## Market Intelligence
+    - Competitive landscape insights
+    - Market opportunities and threats
+    - Industry trends and dynamics
+
+    ## Strategic Recommendations
+    - Immediate next steps
+    - Key assumptions to validate
+    - Risk mitigation strategies
+
+    ## Implementation Roadmap
+    - MVP recommendations
+    - Product development priorities
+    - Go-to-market approach
+
+    Format as a professional business report with clear headings, bullet points, and actionable insights.
+    """,
+    output_key="final_startup_report",
+)
+
+# Core validation pipeline with iterative improvement
+core_validation_pipeline = SequentialAgent(
+    name="core_validation_pipeline",
+    description="Executes core startup validation across multiple dimensions.",
     sub_agents=[
         idea_critique_agent,
         market_research_agent,
@@ -234,48 +437,47 @@ startup_validator_pipeline = SequentialAgent(
     ],
 )
 
-
-# Summary Agent
-summary_agent = LlmAgent(
-    name="startup_summary_agent",
-    model="gemini-2.5-flash",
+# Full validation pipeline with quality control
+startup_validator_pipeline = SequentialAgent(
+    name="startup_validator_pipeline",
     description="""
-    An agent that takes the outputs from all validation agents and synthesizes
-    them into a comprehensive, structured report for easy decision-making.
+    A comprehensive startup validation pipeline that performs iterative analysis
+    with quality control and generates a professional validation report.
     """,
-    instruction="""
-    You are a business analyst. Consolidate all the feedback from the validation pipeline into a single, well-structured report that includes:
-
-    ## Executive Summary
-    - Overall recommendation (Pursue/Refine/Pivot/Abandon)
-    - Key strengths and critical weaknesses
-
-    ## Market Analysis
-    - Market size and opportunity
-    - Competitive landscape summary
-    - Key trends and insights
-
-    ## Product & Strategy
-    - Core value proposition
-    - MVP recommendations
-    - Product-market fit assessment
-
-    ## Investment Perspective
-    - Funding potential and investor appeal
-    - Key risks and mitigation strategies
-
-    ## Scoring Summary
-    - Overall score and breakdown by category
-    - Critical success factors
-
-    ## Next Steps
-    - Immediate action items
-    - Key assumptions to validate
-
-    Format the output as a professional business report with clear sections and actionable insights.
-    """,
-    sub_agents=[startup_validator_pipeline],
+    sub_agents=[
+        core_validation_pipeline,
+        LoopAgent(
+            name="validation_quality_loop",
+            max_iterations=2,
+            sub_agents=[
+                validation_evaluator,
+                ValidationQualityChecker(name="quality_checker"),
+                enhanced_analysis_agent,
+            ],
+        ),
+        summary_agent,
+    ],
 )
 
+# Interactive validation agent (manager pattern)
+interactive_startup_validator = LlmAgent(
+    name="interactive_startup_validator",
+    model="gemini-2.0-flash",
+    description="The primary startup validation assistant that guides users through the validation process.",
+    instruction="""
+    You are a startup validation consultant. Your primary function is to help entrepreneurs
+    validate their startup ideas through comprehensive analysis.
 
-root_agent = summary_agent
+    When a user presents a startup idea, you should:
+    1. **Acknowledge** the idea and explain the validation process
+    2. **Execute** comprehensive validation using the startup_validator_pipeline
+    3. **Present** the results in a clear, actionable format
+
+    Always be encouraging while being honest about potential challenges.
+    Guide users through next steps based on the validation results.
+    """,
+    sub_agents=[startup_validator_pipeline],
+    tools=[AgentTool(core_validation_pipeline)],
+)
+
+root_agent = interactive_startup_validator
