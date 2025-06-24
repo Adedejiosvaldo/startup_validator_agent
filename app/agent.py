@@ -61,7 +61,12 @@ class ValidationFeedback(BaseModel):
 # --- Callbacks ---
 def collect_validation_results_callback(callback_context: CallbackContext) -> None:
     """Collects the structured outputs from the validation agents."""
-    agent_name = callback_context.agent.name
+    # Get agent name from the invocation context
+    agent_name = (
+        callback_context._invocation_context.agent.name
+        if callback_context._invocation_context.agent
+        else "unknown_agent"
+    )
     output = callback_context.latest_output
 
     if not isinstance(output, BaseModel):
@@ -74,7 +79,12 @@ def collect_validation_results_callback(callback_context: CallbackContext) -> No
 
 def enhance_validation_callback(callback_context: CallbackContext) -> None:
     """Enhanced callback that tracks validation completeness and quality."""
-    agent_name = callback_context.agent.name
+    # Get agent name from the invocation context
+    agent_name = (
+        callback_context._invocation_context.agent.name
+        if callback_context._invocation_context.agent
+        else "unknown_agent"
+    )
     output = callback_context.latest_output
 
     # Track all outputs, structured and unstructured
