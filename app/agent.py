@@ -67,14 +67,25 @@ def collect_validation_results_callback(callback_context: CallbackContext) -> No
         if callback_context._invocation_context.agent
         else "unknown_agent"
     )
-    output = callback_context.latest_output
 
-    if not isinstance(output, BaseModel):
+    # Get the latest event from the session
+    session = callback_context._invocation_context.session
+    if not session.events:
         return
 
-    validation_results = callback_context.state.get("validation_results", {})
-    validation_results[agent_name] = output.dict()
-    callback_context.state["validation_results"] = validation_results
+    latest_event = session.events[-1]
+    if not latest_event.content or not latest_event.content.parts:
+        return
+
+    # Try to parse the output as a Pydantic model
+    try:
+        output_text = latest_event.content.parts[0].text
+        # For now, we'll store the text output - structured parsing would need the specific model
+        validation_results = callback_context.state.get("validation_results", {})
+        validation_results[agent_name] = {"output": output_text}
+        callback_context.state["validation_results"] = validation_results
+    except (AttributeError, IndexError):
+        return
 
 
 def enhance_validation_callback(callback_context: CallbackContext) -> None:
@@ -85,30 +96,37 @@ def enhance_validation_callback(callback_context: CallbackContext) -> None:
         if callback_context._invocation_context.agent
         else "unknown_agent"
     )
-    output = callback_context.latest_output
 
-    # Track all outputs, structured and unstructured
-    all_results = callback_context.state.get("all_validation_outputs", {})
+    # Get the latest event from the session
+    session = callback_context._invocation_context.session
+    if not session.events:
+        return
 
-    if isinstance(output, BaseModel):
-        all_results[agent_name] = {
-            "type": "structured",
-            "data": output.dict(),
-            "agent_name": agent_name,
-        }
-        # Also update the validation_results for structured outputs
-        validation_results = callback_context.state.get("validation_results", {})
-        validation_results[agent_name] = output.dict()
-        callback_context.state["validation_results"] = validation_results
-    else:
-        # Handle text outputs from agents like market_research, idea_critique, etc.
+    latest_event = session.events[-1]
+    if not latest_event.content or not latest_event.content.parts:
+        return
+
+    try:
+        output_text = latest_event.content.parts[0].text
+
+        # Track all outputs, structured and unstructured
+        all_results = callback_context.state.get("all_validation_outputs", {})
+
         all_results[agent_name] = {
             "type": "text",
-            "data": str(output) if output else "",
+            "data": output_text,
             "agent_name": agent_name,
         }
 
-    callback_context.state["all_validation_outputs"] = all_results
+        callback_context.state["all_validation_outputs"] = all_results
+
+        # Also update validation_results for consistency
+        validation_results = callback_context.state.get("validation_results", {})
+        validation_results[agent_name] = {"output": output_text}
+        callback_context.state["validation_results"] = validation_results
+
+    except (AttributeError, IndexError):
+        return
 
 
 # --- Custom Agent for Loop Control ---
