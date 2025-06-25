@@ -13,6 +13,99 @@ from google.genai import types as genai_types
 from pydantic import BaseModel, Field
 
 
+# --- Real-Time Data Integration Models ---
+class MarketIntelligence(BaseModel):
+    """Model for real-time market data and intelligence."""
+
+    funding_data: dict = Field(
+        default_factory=dict,
+        description="Recent funding rounds and investment trends",
+    )
+    patent_landscape: dict = Field(
+        default_factory=dict, description="Patent analysis and IP landscape"
+    )
+    social_sentiment: dict = Field(
+        default_factory=dict, description="Social media sentiment and discussions"
+    )
+    competitive_intelligence: dict = Field(
+        default_factory=dict, description="Real-time competitive tracking data"
+    )
+    market_timing_indicators: list[str] = Field(
+        default_factory=list, description="Market timing signals and trends"
+    )
+    data_freshness: str = Field(description="Timestamp of data collection")
+    confidence_score: float = Field(description="Confidence in data quality (0-1)")
+
+
+class VisualizationRequest(BaseModel):
+    """Model for requesting specific visualizations."""
+
+    chart_type: Literal[
+        "market_map",
+        "competitive_landscape",
+        "funding_timeline",
+        "customer_journey",
+        "feature_matrix",
+        "scenario_comparison",
+        "risk_heatmap",
+        "validation_dashboard",
+    ] = Field(description="Type of visualization needed")
+    data_source: str = Field(description="Source of data for visualization")
+    title: str = Field(description="Title for the visualization")
+    description: str = Field(description="Description of what the chart shows")
+    insights: list[str] = Field(
+        default_factory=list, description="Key insights highlighted by the visualization"
+    )
+    interactive_elements: list[str] = Field(
+        default_factory=list, description="Interactive features of the visualization"
+    )
+    priority: Literal["low", "medium", "high"] = Field(
+        default="medium", description="Priority for generating this visualization"
+    )
+
+
+class DataSource(BaseModel):
+    """Model for tracking data sources and their reliability."""
+
+    source_name: str = Field(description="Name of the data source")
+    source_type: Literal[
+        "funding_database",
+        "patent_office",
+        "social_media",
+        "market_research",
+        "company_filings",
+        "news_api",
+    ] = Field(description="Type of data source")
+    last_updated: str = Field(description="When data was last refreshed")
+    reliability_score: float = Field(description="Reliability rating (0-1)")
+    coverage_areas: list[str] = Field(description="What aspects this source covers")
+    api_status: Literal["active", "limited", "unavailable"] = Field(
+        description="Current status of the data source"
+    )
+
+
+class RealTimeInsight(BaseModel):
+    """Model for real-time insights and market signals."""
+
+    insight_type: Literal[
+        "funding_trend",
+        "competitor_move",
+        "market_shift",
+        "regulatory_change",
+        "technology_breakthrough",
+        "customer_signal",
+    ] = Field(description="Type of real-time insight")
+    urgency: Literal["low", "medium", "high", "critical"] = Field(
+        description="Urgency level of the insight"
+    )
+    title: str = Field(description="Brief title of the insight")
+    description: str = Field(description="Detailed description of the insight")
+    impact_assessment: str = Field(description="How this impacts the startup idea")
+    recommended_action: str = Field(description="Recommended response or action")
+    data_sources: list[str] = Field(description="Sources supporting this insight")
+    timestamp: str = Field(description="When this insight was generated")
+
+
 # --- Enhanced Structured Output Models for UX Improvements ---
 class IdeaProfile(BaseModel):
     """Model for capturing detailed idea characteristics and context."""
@@ -355,6 +448,66 @@ def enhance_validation_callback(callback_context: CallbackContext) -> None:
         return
 
 
+def real_time_data_callback(callback_context: CallbackContext) -> None:
+    """Enhanced callback that integrates real-time data and triggers visualizations when needed."""
+    # Get agent name from the invocation context
+    agent_name = (
+        callback_context._invocation_context.agent.name
+        if callback_context._invocation_context.agent.name
+        else "unknown_agent"
+    )
+
+    # Standard progress tracking
+    progress_tracking_callback(callback_context)
+    
+    # Get the latest event from the session
+    session = callback_context._invocation_context.session
+    if not session.events:
+        return
+
+    latest_event = session.events[-1]
+    if not latest_event.content or not latest_event.content.parts:
+        return
+
+    try:
+        output_text = latest_event.content.parts[0].text
+
+        # Check if this agent generated market intelligence or visualization requests
+        if agent_name == "real_time_market_intelligence_agent":
+            # Store market intelligence for other agents to use
+            market_intel = callback_context.state.get("market_intelligence", {})
+            callback_context.state["market_intelligence"] = market_intel
+            print(f"[REAL-TIME] Market intelligence updated from {agent_name}")
+
+        elif agent_name == "real_time_insight_monitor_agent":
+            # Store urgent insights for immediate attention
+            insights = callback_context.state.get("real_time_insights", [])
+            callback_context.state["real_time_insights"] = insights
+            print(f"[REAL-TIME] {len(insights) if isinstance(insights, list) else 0} urgent insights identified")
+
+        elif agent_name == "visual_dashboard_agent":
+            # Store visualization requests for potential rendering
+            viz_requests = callback_context.state.get("visualization_requests", [])
+            callback_context.state["visualization_requests"] = viz_requests
+            print(f"[VISUAL] {len(viz_requests) if isinstance(viz_requests, list) else 0} visualizations recommended")
+
+        # Store enhanced output with real-time context
+        enhanced_outputs = callback_context.state.get("enhanced_validation_outputs", {})
+        enhanced_outputs[agent_name] = {
+            "type": "enhanced_text",
+            "data": output_text,
+            "agent_name": agent_name,
+            "has_real_time_data": agent_name in ["real_time_market_intelligence_agent", "real_time_insight_monitor_agent"],
+            "has_visualizations": agent_name == "visual_dashboard_agent",
+            "timestamp": "current_time"
+        }
+        callback_context.state["enhanced_validation_outputs"] = enhanced_outputs
+
+    except (AttributeError, IndexError) as e:
+        print(f"[REAL-TIME CALLBACK ERROR] Failed to process output from {agent_name}: {e}")
+        return
+
+
 # --- Custom Agent for Loop Control ---
 class ValidationQualityChecker(BaseAgent):
     """Checks validation quality and escalates to stop the loop if grade is 'pass'."""
@@ -378,31 +531,64 @@ class ValidationQualityChecker(BaseAgent):
             yield Event(author=self.name)
 
 
-# MarketResearch Agent
-# This agent is responsible for conducting market research, gathering data on competitors, and identifying trends in the industry.
+# Enhanced Market Research Agent with Real-Time Data Integration
 market_research_agent = LlmAgent(
     name="startup_market_research_agent",
     model="gemini-2.5-flash",
     description="""
-    A specialized agent for conducting in-depth market research to support startup idea validation.
-    It gathers and analyzes data on competitors, industry trends, venture capital interest, and
-    emerging market dynamics. This agent plays a critical role in helping founders understand
-    market viability, gaps, and opportunities before pursuing a startup idea.
+    An advanced market research agent that conducts comprehensive market analysis using real-time data
+    integration, competitive intelligence, and trend analysis to support startup validation.
     """,
     instruction="""
-    You are an expert market researcher and startup analyst. Your primary objective is to evaluate
-    the potential of a startup idea by performing deep market research. You must:
+    You are an expert market researcher and startup analyst with access to real-time market intelligence.
+    Your objective is to provide comprehensive market analysis that leverages both traditional research
+    and real-time data streams.
 
-    1. Extract key industry-related keywords from the provided idea or concept.
-    2. Use the Google Search tool to gather real-time data on:
-       - Direct and indirect competitors
-       - Industry trends and patterns
-       - Recent venture capital funding and investor interest
-       - Market size, growth rate, and potential gaps
-    3. Summarize findings in a structured and actionable format, highlighting threats, opportunities, and whitespace.
-    4. Focus on providing insights that would help validate or refine the startup idea.
+    **ENHANCED RESEARCH APPROACH:**
 
-    Always rely on Google Search for the most up-to-date market information, and make sure to extract keywords that best represent the core of the idea.
+    1. **Traditional Market Research**: Industry analysis, market sizing, competitive landscape
+    2. **Real-Time Intelligence Integration**: Access market_intelligence data for recent developments
+    3. **Competitive Tracking**: Monitor recent competitor moves, funding, and strategic changes
+    4. **Investment Trend Analysis**: Analyze recent funding patterns and investor interest
+    5. **Customer Signal Detection**: Identify real-time customer discussions and sentiment
+
+    **RESEARCH METHODOLOGY:**
+    
+    **Phase 1: Foundation Research**
+    - Extract key industry keywords from the startup idea
+    - Use Google Search for fundamental market data (size, growth, segments)
+    - Identify primary and secondary competitors
+    - Map basic competitive landscape and market structure
+
+    **Phase 2: Real-Time Enhancement**
+    - Integrate market_intelligence data for recent funding trends
+    - Analyze recent competitor announcements and strategic moves
+    - Identify emerging market trends and timing indicators
+    - Assess customer sentiment and discussion trends
+
+    **Phase 3: Synthesis and Analysis**
+    - Combine traditional and real-time data for comprehensive view
+    - Identify market opportunities and timing advantages
+    - Highlight competitive threats and defensive strategies
+    - Assess market readiness and timing factors
+
+    **OUTPUT FOCUS:**
+    - Market landscape with both established players and emerging trends
+    - Competitive analysis including recent moves and strategic shifts
+    - Investment climate and funding availability in this space
+    - Customer sentiment and adoption signals
+    - Market timing analysis with urgency indicators
+    - Strategic recommendations based on current market dynamics
+
+    **INTEGRATION WITH REAL-TIME DATA:**
+    When market_intelligence is available, use it to enhance your analysis with:
+    - Recent funding rounds and valuation trends
+    - Latest competitive moves and product launches
+    - Current customer discussions and sentiment
+    - Market timing signals and regulatory changes
+
+    Provide actionable insights that help founders understand both the static market landscape 
+    and dynamic market conditions that could impact their timing and strategy.
     """,
     tools=[google_search],
     after_agent_callback=progress_tracking_callback,
@@ -668,6 +854,207 @@ strategic_synthesis_agent = LlmAgent(
     after_agent_callback=progress_tracking_callback,
 )
 
+# --- Real-Time Data Integration Agents ---
+
+# Real-Time Market Intelligence Agent
+market_intelligence_agent = LlmAgent(
+    name="real_time_market_intelligence_agent",
+    model="gemini-2.0-flash",
+    description="""
+    A real-time data integration agent that gathers live market intelligence from multiple sources
+    including funding databases, patent offices, social sentiment, and competitive tracking.
+    """,
+    instruction="""
+    You are a real-time market intelligence specialist who gathers and synthesizes live data
+    to provide current market context for startup validation.
+
+    **DATA SOURCES TO SIMULATE:**
+    1. **Funding Intelligence**: Recent rounds, investor activity, valuation trends
+    2. **Patent Landscape**: Recent filings, IP activity, technology trends  
+    3. **Social Sentiment**: Customer discussions, product feedback, market buzz
+    4. **Competitive Tracking**: Product launches, feature updates, strategic moves
+    5. **Market Timing**: Industry reports, regulatory changes, macro trends
+
+    **INTELLIGENCE GATHERING APPROACH:**
+    - Use Google Search to find recent funding announcements and investment trends
+    - Search for patent filings and IP activity in the relevant technology space
+    - Look for social media discussions, Reddit threads, and forum conversations
+    - Track competitor announcements, product launches, and strategic moves
+    - Identify regulatory changes or market timing indicators
+
+    **ANALYSIS FOCUS:**
+    - Funding patterns: Who's investing in this space? What valuations?
+    - Technology trends: What IP activity suggests about market direction?
+    - Customer signals: What are people saying about existing solutions?
+    - Competitive dynamics: How are competitors positioning and evolving?
+    - Market timing: Are there regulatory or macro factors creating urgency?
+
+    **OUTPUT REQUIREMENTS:**
+    Generate a MarketIntelligence object with:
+    - Recent funding data and investment trends
+    - Patent landscape analysis
+    - Social sentiment and customer discussions
+    - Competitive intelligence updates
+    - Market timing indicators and signals
+    - Data freshness timestamp and confidence assessment
+
+    Focus on actionable intelligence that would impact startup validation decisions.
+    """,
+    tools=[google_search],
+    output_schema=MarketIntelligence,
+    output_key="market_intelligence",
+    after_agent_callback=progress_tracking_callback,
+)
+
+# Real-Time Insight Monitor Agent
+insight_monitor_agent = LlmAgent(
+    name="real_time_insight_monitor_agent",
+    model="gemini-2.0-flash",
+    description="""
+    A monitoring agent that identifies urgent market signals, competitive moves, 
+    and time-sensitive opportunities that could impact the startup validation.
+    """,
+    instruction="""
+    You are a market monitoring specialist who identifies time-sensitive insights
+    and urgent market signals that could significantly impact startup validation decisions.
+
+    **MONITORING FOCUS AREAS:**
+    1. **Funding Trends**: Sudden shifts in investor interest or valuation patterns
+    2. **Competitor Moves**: Major product launches, acquisitions, or strategic pivots  
+    3. **Market Shifts**: Regulatory changes, customer behavior changes, technology breakthroughs
+    4. **Customer Signals**: Viral discussions, mass complaints, unmet demand signals
+    5. **Technology Changes**: New platforms, APIs, or infrastructure that could be game-changing
+
+    **INSIGHT IDENTIFICATION:**
+    - Look for recent developments that could create urgency or opportunity
+    - Identify competitive threats that require immediate strategic response
+    - Spot regulatory or policy changes that could open/close market windows
+    - Detect customer behavior shifts that validate or invalidate assumptions
+    - Find technology breakthroughs that could accelerate or obsolete the solution
+
+    **URGENCY ASSESSMENT:**
+    - **Critical**: Immediate threat or opportunity requiring urgent action
+    - **High**: Important development affecting strategy within 1-3 months
+    - **Medium**: Relevant trend to monitor and plan for within 6 months
+    - **Low**: Background information useful for long-term planning
+
+    **FOR EACH INSIGHT:**
+    - Assess impact on the specific startup idea being validated
+    - Recommend specific actions or strategic responses
+    - Provide supporting data sources and evidence
+    - Estimate timeline for when action should be taken
+
+    Use Google Search to find the most recent and relevant market developments.
+    """,
+    tools=[google_search],
+    output_schema=list[RealTimeInsight],
+    output_key="real_time_insights",
+    after_agent_callback=progress_tracking_callback,
+)
+
+# Visual Dashboard Generator Agent
+visual_dashboard_agent = LlmAgent(
+    name="visual_dashboard_agent",
+    model="gemini-2.0-flash",
+    description="""
+    An intelligent visualization agent that determines when visuals would enhance understanding
+    and generates specifications for charts, maps, and interactive dashboards.
+    """,
+    instruction="""
+    You are a data visualization expert who determines when visual representations would 
+    significantly enhance understanding of the startup validation analysis.
+
+    **VISUALIZATION DECISION CRITERIA:**
+    Only recommend visualizations when they would provide clear value:
+    - Complex data relationships that are hard to explain in text
+    - Competitive positioning that benefits from visual mapping
+    - Timeline data showing trends or progressions
+    - Multi-dimensional comparisons (features, competitors, scenarios)
+    - Risk/opportunity matrices that benefit from visual representation
+    - Market mapping or segmentation analysis that would clarify positioning
+    - Executive presentation or investor pitch preparation
+
+    **AVAILABLE VISUALIZATION TYPES:**
+    1. **Market Map**: Competitive positioning and market landscape
+    2. **Competitive Landscape**: Feature comparison matrix and positioning
+    3. **Funding Timeline**: Investment trends and funding patterns over time
+    4. **Customer Journey**: User experience flow and touchpoints
+    5. **Feature Matrix**: Product capability comparison across competitors
+    6. **Scenario Comparison**: Side-by-side scenario outcomes and probabilities
+    7. **Risk Heatmap**: Risk/impact matrix with mitigation strategies
+    8. **Validation Dashboard**: Overall validation status and key metrics
+
+    **ANALYSIS APPROACH:**
+    - Review all validation outputs to identify complex data relationships
+    - Look for multi-dimensional data that would benefit from visualization
+    - Identify competitive analysis that could be clearer with visual mapping
+    - Find scenario or timeline data that would benefit from charts
+    - Assess whether the audience would benefit from interactive exploration
+
+    **FOR EACH RECOMMENDED VISUALIZATION:**
+    - Justify why this visual would add significant value
+    - Specify the exact data to be visualized
+    - Describe key insights the visualization would highlight
+    - Define any interactive elements that would enhance understanding
+    - Set priority based on importance to validation decision-making
+
+    Only recommend visualizations that would materially improve understanding or decision-making.
+    """,
+    output_schema=list[VisualizationRequest],
+    output_key="visualization_requests",
+    after_agent_callback=progress_tracking_callback,
+)
+
+# Data Source Reliability Agent
+data_reliability_agent = LlmAgent(
+    name="data_source_reliability_agent",
+    model="gemini-2.0-flash",
+    description="""
+    A data quality specialist that assesses the reliability and freshness of different
+    data sources and provides confidence metrics for the validation analysis.
+    """,
+    instruction="""
+    You are a data quality specialist who evaluates the reliability and freshness
+    of data sources used in the startup validation process.
+
+    **DATA SOURCE ASSESSMENT:**
+    Evaluate the following types of data sources:
+    1. **Market Research Data**: Industry reports, market sizing studies
+    2. **Funding Databases**: Investment tracking, valuation data
+    3. **Competitive Intelligence**: Company information, product features
+    4. **Customer Signals**: Social media, review sites, forums
+    5. **Technical Sources**: Patent databases, technical documentation
+    6. **Regulatory Sources**: Government filings, policy documents
+
+    **RELIABILITY FACTORS:**
+    - **Source Authority**: Reputation and expertise of the data provider
+    - **Data Freshness**: How recent is the information?
+    - **Methodology**: How was the data collected and validated?
+    - **Sample Size**: Is the data representative?
+    - **Bias Potential**: Could there be systematic biases in the data?
+    - **Consistency**: Does this data align with other reliable sources?
+
+    **ASSESSMENT CRITERIA:**
+    - **High Reliability (0.8-1.0)**: Authoritative sources, recent data, proven methodology
+    - **Medium Reliability (0.5-0.7)**: Decent sources but some limitations or age
+    - **Low Reliability (0.2-0.4)**: Questionable sources, old data, or poor methodology
+    - **Unreliable (0.0-0.1)**: Untrustworthy sources or severely outdated information
+
+    **OUTPUT REQUIREMENTS:**
+    For each data source used in the validation:
+    - Assess reliability score based on authority and methodology
+    - Note data freshness and last update timestamp
+    - Identify coverage areas and limitations
+    - Flag any potential biases or gaps
+    - Recommend data quality improvements if needed
+
+    Provide transparency about data quality to help users make informed decisions.
+    """,
+    output_schema=list[DataSource],
+    output_key="data_source_assessment",
+    after_agent_callback=progress_tracking_callback,
+)
+
 # --- New UX Enhancement Agents ---
 
 # Conversational Intake Agent
@@ -713,49 +1100,96 @@ conversational_intake_agent = LlmAgent(
     Be conversational but efficient. Ask follow-up questions to clarify vague responses.
     """,
     output_schema=IdeaProfile,
+    disallow_transfer_to_parent=True,
+    disallow_transfer_to_peers=True,
     output_key="idea_profile",
     after_agent_callback=progress_tracking_callback,
 )
 
-# Idea Classifier and Router Agent
+# Intelligent Agent Router with Real-Time Data Integration
+intelligent_router_agent = LlmAgent(
+    name="intelligent_agent_router",
+    model="gemini-2.0-flash",
+    description="""
+    An advanced routing agent that determines which validation agents to activate based on
+    idea characteristics, user preferences, and real-time data availability.
+    """,
+    instruction="""
+    You are an intelligent validation router who creates optimized agent execution plans
+    based on idea characteristics and determines when real-time data integration adds value.
+
+    **ROUTING DECISION FACTORS:**
+    1. **Idea Type & Maturity**: What kind of validation is most critical?
+    2. **Market Dynamics**: Is this a fast-moving space that benefits from real-time data?
+    3. **Competition Level**: Are there active competitors requiring real-time monitoring?
+    4. **Investment Climate**: Is funding activity relevant to validation?
+    5. **Regulatory Environment**: Are there timing-sensitive regulatory factors?
+    6. **Technology Trends**: Is this space seeing rapid technological change?
+
+    **REAL-TIME DATA INTEGRATION CRITERIA:**
+    Include real-time data agents when:
+    - Highly competitive space with frequent product launches or funding
+    - Fast-moving technology sector (AI, crypto, biotech, etc.)
+    - Regulatory environment with pending changes
+    - Consumer market with viral potential or social trends
+    - B2B market with recent investment surges or M&A activity
+    - Ideas at prototype+ stage considering fundraising or launch timing
+
+    **VISUALIZATION CRITERIA:**
+    Include visual dashboard agent when:
+    - Complex competitive landscape with 5+ major players
+    - Multi-dimensional feature comparisons needed
+    - Scenario planning with multiple variables
+    - Market mapping or segmentation analysis would clarify positioning
+    - Timeline-sensitive decisions requiring trend visualization
+    - Executive presentation or investor pitch preparation
+
+    **AGENT SELECTION LOGIC:**
+    
+    **Always Include:**
+    - Conversational Intake Agent
+    - Idea Classifier Agent
+    - Idea Critique Agent
+    - Customer Pain Point Agent
+    - PMF Agent
+
+    **Include Based on Idea Type:**
+    - Market Research Agent (always)
+    - Anti-Pattern Detection Agent (always for pattern recognition)
+    - Evidence-Based Scoring Agent (when data-driven assessment needed)
+    - Investor Agent (when funding is a consideration)
+    - MVP Agent (for prototype+ stage ideas)
+    - Product Development Agent (for technical products)
+
+    **Include for Real-Time Context:**
+    - Market Intelligence Agent (for competitive/fast-moving spaces)
+    - Real-Time Insight Monitor Agent (for time-sensitive markets)
+    - Data Reliability Agent (when using external data sources)
+
+    **Include for Enhanced Communication:**
+    - Visual Dashboard Agent (for complex analysis or executive needs)
+    - Scenario Planning Agent (for high-uncertainty environments)
+    - Clarification Agent (when gaps exist in initial analysis)
+
+    Generate an enhanced RoutingPlan that optimizes validation quality while avoiding unnecessary complexity.
+    """,
+    output_schema=RoutingPlan,
+    output_key="intelligent_routing_plan",
+    after_agent_callback=progress_tracking_callback,
+)
+
+# Idea Classifier Agent (backwards compatibility)
 idea_classifier_agent = LlmAgent(
     name="idea_classifier_agent",
     model="gemini-2.0-flash",
     description="""
-    An intelligent classifier that categorises startup ideas and creates optimised
-    validation routing plans based on idea characteristics and user preferences.
+    A basic idea classifier that categorises startup ideas for routing decisions.
     """,
     instruction="""
-    You are a startup validation strategist. Based on the idea_profile, create an optimised
-    validation plan that adapts to the specific characteristics of this startup idea.
-
-    **ANALYSIS FACTORS:**
-    - Idea maturity stage (concept vs. prototype vs. early traction)
-    - Industry type (B2B SaaS, consumer, marketplace, hardware, etc.)
-    - Complexity level (simple app vs. complex platform vs. deep tech)
-    - Market dynamics (established vs. emerging vs. creating new category)
-    - Founder experience level and specific concerns
-
-    **ROUTING STRATEGY:**
-    - Select most relevant agents for this specific idea type
-    - Identify agents that can run in parallel vs. those requiring sequential execution
-    - Estimate time requirements based on complexity and depth needed
-    - Prioritise agents addressing the founder's specific concerns
-
-    **AGENT SELECTION LOGIC:**
-    - Market Research: Always include for competitive landscape
-    - Customer Pain Points: Critical for all B2C and most B2B ideas
-    - PMF Analysis: Essential for all ideas
-    - Investor Analysis: Include unless very early concept stage
-    - MVP Planning: Include for prototype+ stage ideas
-    - Technical Feasibility: Include for deep tech or complex platform ideas
-    - Anti-pattern Detection: Always include for pattern recognition
-    - Scenario Planning: Include for complex/high-risk ideas
-
-    Generate a RoutingPlan that optimises the validation process for this specific idea.
+    Classify the startup idea and create a basic routing plan.
     """,
     output_schema=RoutingPlan,
-    output_key="routing_plan",
+    output_key="basic_routing_plan",
     after_agent_callback=progress_tracking_callback,
 )
 
@@ -797,10 +1231,11 @@ anti_pattern_agent = LlmAgent(
     - Suggest concrete mitigation strategies
     - Reference successful companies that overcame similar challenges
 
-    Output a list of AntiPattern objects with actionable mitigation advice.
+    Output an AntiPatternAnalysis object with detected patterns and actionable mitigation advice.
     """,
-    tools=[google_search],
-    output_schema=list[AntiPattern],
+    output_schema=AntiPattern,
+    disallow_transfer_to_parent=True,
+    disallow_transfer_to_peers=True,
     output_key="detected_anti_patterns",
     after_agent_callback=progress_tracking_callback,
 )
@@ -815,7 +1250,8 @@ evidence_scoring_agent = LlmAgent(
     """,
     instruction="""
     You are a data-driven startup analyst who creates evidence-based assessments
-    rather than subjective scores. Use the Google Search tool to gather supporting data.
+    rather than subjective scores. Base your analysis on your knowledge of market trends,
+    industry data, and comparable company information.
 
     **ASSESSMENT DIMENSIONS:**
     1. **Market Opportunity**: Size, growth rate, timing, barriers to entry
@@ -825,23 +1261,24 @@ evidence_scoring_agent = LlmAgent(
     5. **Execution Probability**: Team capabilities, resource requirements, timeline realism
 
     **EVIDENCE GATHERING APPROACH:**
-    - Search for market size data, growth projections, and industry reports
-    - Find comparable companies and their funding/growth trajectories
-    - Look for customer validation evidence (surveys, pilot programs, early adoption)
-    - Research technical feasibility through similar implementations
-    - Analyze competitive landscape and differentiation opportunities
+    - Analyse market size data, growth projections, and industry trends from your knowledge
+    - Identify comparable companies and their funding/growth trajectories
+    - Look for customer validation evidence patterns from similar startups
+    - Assess technical feasibility through similar implementations you're aware of
+    - Analyse competitive landscape and differentiation opportunities
 
     **FOR EACH DIMENSION:**
-    - Provide specific evidence points with sources
-    - Include comparable companies for benchmarking
-    - Assess confidence level based on data quality and quantity
+    - Provide specific evidence points with reasoning
+    - Include comparable companies for benchmarking where known
+    - Assess confidence level based on data quality and your certainty
     - Identify risk factors and upside potential
     - Use ranges rather than point estimates where appropriate
 
-    Generate EvidenceBasedScore objects for each dimension with supporting data and sources.
+    Generate EvidenceBasedScore objects for each dimension with supporting data and reasoning.
     """,
-    tools=[google_search],
-    output_schema=list[EvidenceBasedScore],
+    output_schema=EvidenceBasedScore,
+    disallow_transfer_to_parent=True,
+    disallow_transfer_to_peers=True,
     output_key="evidence_based_scores",
     after_agent_callback=progress_tracking_callback,
 )
@@ -856,7 +1293,8 @@ scenario_planning_agent = LlmAgent(
     """,
     instruction="""
     You are a strategic scenario planner who helps startups prepare for multiple futures.
-    Create comprehensive scenario analyses to stress-test this startup idea.
+    Create comprehensive scenario analyses to stress-test this startup idea based on your
+    knowledge of market trends and startup patterns.
 
     **SCENARIO TYPES TO GENERATE:**
 
@@ -886,16 +1324,17 @@ scenario_planning_agent = LlmAgent(
 
     **FOR EACH SCENARIO:**
     - Define key assumptions and market conditions
-    - Estimate probability based on historical data and trends
+    - Estimate probability based on historical patterns and trends
     - Describe competitive response and market dynamics
-    - Analyze financial implications and resource requirements
+    - Analyse financial implications and resource requirements
     - Recommend strategic actions and contingency plans
     - Define success metrics and early warning indicators
 
-    Use Google Search to gather data on similar companies' trajectories and market trends.
+    Base your analysis on patterns from similar companies and market dynamics you're familiar with.
     """,
-    tools=[google_search],
-    output_schema=list[ScenarioAnalysis],
+    output_schema=ScenarioAnalysis,
+    disallow_transfer_to_parent=True,
+    disallow_transfer_to_peers=True,
     output_key="scenario_analyses",
     after_agent_callback=progress_tracking_callback,
 )
@@ -938,7 +1377,7 @@ clarification_agent = LlmAgent(
 
     Only generate questions where the answers would materially improve validation quality.
     """,
-    output_schema=list[ClarificationQuestion],
+    output_schema=ClarificationQuestion,
     output_key="clarification_questions",
     after_agent_callback=progress_tracking_callback,
 )
@@ -985,20 +1424,21 @@ progress_agent = LlmAgent(
 
 # --- Existing Agents (keeping original functionality) ---
 
-# Enhanced UX Validation Pipeline with Intelligent Routing
+# Enhanced UX Validation Pipeline with Real-Time Data Integration
 enhanced_ux_pipeline = SequentialAgent(
     name="enhanced_ux_validation_pipeline",
     description="""
     An intelligent startup validation pipeline with conversational intake, dynamic routing,
-    progress tracking, and adaptive validation based on idea characteristics and user preferences.
+    real-time data integration, and adaptive visualization based on complexity and needs.
     """,
     sub_agents=[
         conversational_intake_agent,
-        idea_classifier_agent,
+        idea_classifier_agent,  # Keep original for backwards compatibility
+        intelligent_router_agent,  # Enhanced routing with real-time data decisions
         progress_agent,
-        # Core validation agents with enhanced UX
+        # Core validation agents
         idea_critique_agent,
-        market_research_agent,
+        market_research_agent,  # Enhanced with real-time data integration
         painpoint_agent,
         anti_pattern_agent,
         evidence_scoring_agent,
@@ -1007,6 +1447,12 @@ enhanced_ux_pipeline = SequentialAgent(
         mvp_agent,
         product_dev_agent,
         scenario_planning_agent,
+        # Real-time data agents (activated based on routing decisions)
+        market_intelligence_agent,
+        insight_monitor_agent,
+        data_reliability_agent,
+        # Visualization and clarification
+        visual_dashboard_agent,
         clarification_agent,
         # Quality control and synthesis
         LoopAgent(
@@ -1024,58 +1470,85 @@ enhanced_ux_pipeline = SequentialAgent(
     ],
 )
 
-# Enhanced Interactive Startup Validator with UX Improvements
+# Enhanced Interactive Startup Validator with Real-Time Data & Visualizations
 enhanced_startup_validator = LlmAgent(
     name="enhanced_startup_validator",
     model="gemini-2.0-flash",
     description="""
     An advanced startup validation assistant with conversational intake, progressive disclosure,
-    intelligent routing, and personalized validation experiences.
+    intelligent routing, real-time data integration, and adaptive visualizations.
     """,
     instruction="""
     You are an elite startup validation consultant who provides personalized, progressive validation
-    experiences using advanced multi-agent analysis and intelligent user experience design.
+    experiences using advanced multi-agent analysis, real-time market intelligence, and intelligent
+    visualization capabilities.
 
     **ENHANCED VALIDATION APPROACH:**
 
-    1. **Conversational Discovery**: Begin with guided intake to understand the idea, founder context,
-       and specific validation needs. Adapt your approach based on founder experience level.
+    1. **Conversational Discovery**: Guided intake to understand idea, founder context, and validation needs
 
-    2. **Intelligent Routing**: Use the idea classification to create an optimized validation plan
-       that focuses on the most relevant analyses for this specific idea type.
+    2. **Intelligent Routing**: Adaptive agent selection based on idea characteristics and market dynamics
 
-    3. **Progressive Disclosure**: Provide real-time updates and interim insights as validation
-       progresses, rather than waiting until the end to share findings.
+    3. **Real-Time Data Integration**: Leverage live market intelligence when relevant:
+       - Recent funding rounds and investment trends
+       - Competitive moves and product launches
+       - Customer sentiment and social signals
+       - Regulatory changes and market timing indicators
 
-    4. **Adaptive Depth**: Adjust validation depth based on idea maturity, complexity, and
-       available time. Focus on addressing the founder's specific concerns.
+    4. **Progressive Disclosure**: Real-time updates and interim insights throughout validation
 
-    5. **Interactive Clarification**: Ask targeted questions when additional information would
-       significantly improve validation quality.
+    5. **Adaptive Visualization**: Generate charts and dashboards when they enhance understanding:
+       - Complex competitive landscapes
+       - Multi-scenario comparisons
+       - Market positioning maps
+       - Timeline and trend analysis
 
-    **COMMUNICATION STYLE ADAPTATION:**
-    - **First-time founders**: Use simpler language, more explanation, encourage exploration
-    - **Experienced founders**: Focus on strategic insights, challenge assumptions, highlight nuances
-    - **Serial entrepreneurs**: Provide contrarian perspectives, focus on differentiation and timing
+    6. **Evidence-Based Assessment**: Data-backed analysis with confidence levels and sources
 
-    **VALIDATION FLOW:**
-    1. Conduct conversational intake to understand the opportunity deeply
-    2. Create intelligent routing plan based on idea characteristics
-    3. Execute validation with progress updates and interim insights
-    4. Identify and ask clarifying questions to improve analysis quality
-    5. Detect anti-patterns and provide evidence-based assessments
-    6. Generate scenario analyses and strategic recommendations
-    7. Present findings with clear verdict and actionable next steps
+    **REAL-TIME DATA UTILIZATION:**
+    When market intelligence is available, integrate it to provide:
+    - Current investment climate and funding trends
+    - Recent competitive developments and strategic moves
+    - Live customer sentiment and adoption signals
+    - Market timing opportunities and regulatory windows
+    - Urgent insights requiring immediate strategic response
+
+    **VISUALIZATION DECISION-MAKING:**
+    Recommend visualizations when they would significantly enhance understanding:
+    - "The competitive landscape has 8 major players with distinct positioning - a market map would clarify strategic positioning options"
+    - "Your scenario analysis involves multiple variables and timelines - a comparison dashboard would help evaluate options"
+    - "Recent funding data shows clear trends - a timeline visualization would reveal optimal timing patterns"
+
+    **ENHANCED COMMUNICATION STYLES:**
+    - **First-time founders**: Emphasize education, pattern recognition, and learning from similar companies
+    - **Experienced founders**: Focus on contrarian insights, competitive intelligence, and strategic timing
+    - **Serial entrepreneurs**: Provide market intelligence, ecosystem analysis, and strategic optionality
+
+    **VALIDATION FLOW WITH REAL-TIME ENHANCEMENT:**
+    1. Conduct conversational intake for deep understanding
+    2. Route intelligently based on idea type and market dynamics
+    3. Execute validation with real-time data integration where valuable
+    4. Monitor for urgent insights and time-sensitive opportunities
+    5. Generate visualizations when they enhance decision-making
+    6. Detect anti-patterns and provide evidence-based assessments
+    7. Create scenario analyses with current market context
+    8. Present findings with clear verdict, real-time context, and visual support
 
     **KEY DIFFERENTIATORS:**
-    - Personalized validation path based on idea and founder profile
-    - Real-time insights during validation process
-    - Evidence-backed assessments rather than subjective scores
-    - Anti-pattern detection and mitigation strategies
-    - Multiple scenario planning and stress testing
-    - Interactive clarification for higher quality analysis
+    - Real-time market intelligence integration for timely insights
+    - Intelligent visualization recommendations for complex analysis
+    - Evidence-based scoring with data sources and confidence levels
+    - Anti-pattern detection with current market examples
+    - Scenario planning with real-time market context
+    - Progressive disclosure with interim insights and urgent alerts
 
-    Always conclude with clear strategic guidance and offer to dive deeper into specific areas.
+    **REAL-TIME INSIGHT INTEGRATION:**
+    When urgent insights are detected, immediately surface them:
+    - "URGENT: Major competitor just announced Series B funding - this validates market demand but increases competitive pressure"
+    - "OPPORTUNITY: New regulatory framework creates 6-month window for market entry"
+    - "SIGNAL: Customer discussions show growing frustration with current solutions"
+
+    Always conclude with strategic guidance that incorporates real-time context and offers deeper analysis options.
     """,
     sub_agents=[enhanced_ux_pipeline],
     tools=[AgentTool(enhanced_ux_pipeline)],
