@@ -54,7 +54,8 @@ class VisualizationRequest(BaseModel):
     title: str = Field(description="Title for the visualization")
     description: str = Field(description="Description of what the chart shows")
     insights: list[str] = Field(
-        default_factory=list, description="Key insights highlighted by the visualization"
+        default_factory=list,
+        description="Key insights highlighted by the visualization",
     )
     interactive_elements: list[str] = Field(
         default_factory=list, description="Interactive features of the visualization"
@@ -104,6 +105,33 @@ class RealTimeInsight(BaseModel):
     recommended_action: str = Field(description="Recommended response or action")
     data_sources: list[str] = Field(description="Sources supporting this insight")
     timestamp: str = Field(description="When this insight was generated")
+
+
+# --- Wrapper Models for List Outputs ---
+class RealTimeInsights(BaseModel):
+    """Wrapper model for multiple real-time insights."""
+
+    insights: list[RealTimeInsight] = Field(
+        default_factory=list,
+        description="List of real-time insights and market signals",
+    )
+
+
+class VisualizationRequests(BaseModel):
+    """Wrapper model for multiple visualization requests."""
+
+    requests: list[VisualizationRequest] = Field(
+        default_factory=list, description="List of visualization requests"
+    )
+
+
+class DataSources(BaseModel):
+    """Wrapper model for multiple data sources."""
+
+    sources: list[DataSource] = Field(
+        default_factory=list,
+        description="List of data sources and their reliability information",
+    )
 
 
 # --- Enhanced Structured Output Models for UX Improvements ---
@@ -459,7 +487,7 @@ def real_time_data_callback(callback_context: CallbackContext) -> None:
 
     # Standard progress tracking
     progress_tracking_callback(callback_context)
-    
+
     # Get the latest event from the session
     session = callback_context._invocation_context.session
     if not session.events:
@@ -483,13 +511,17 @@ def real_time_data_callback(callback_context: CallbackContext) -> None:
             # Store urgent insights for immediate attention
             insights = callback_context.state.get("real_time_insights", [])
             callback_context.state["real_time_insights"] = insights
-            print(f"[REAL-TIME] {len(insights) if isinstance(insights, list) else 0} urgent insights identified")
+            print(
+                f"[REAL-TIME] {len(insights) if isinstance(insights, list) else 0} urgent insights identified"
+            )
 
         elif agent_name == "visual_dashboard_agent":
             # Store visualization requests for potential rendering
             viz_requests = callback_context.state.get("visualization_requests", [])
             callback_context.state["visualization_requests"] = viz_requests
-            print(f"[VISUAL] {len(viz_requests) if isinstance(viz_requests, list) else 0} visualizations recommended")
+            print(
+                f"[VISUAL] {len(viz_requests) if isinstance(viz_requests, list) else 0} visualizations recommended"
+            )
 
         # Store enhanced output with real-time context
         enhanced_outputs = callback_context.state.get("enhanced_validation_outputs", {})
@@ -497,14 +529,20 @@ def real_time_data_callback(callback_context: CallbackContext) -> None:
             "type": "enhanced_text",
             "data": output_text,
             "agent_name": agent_name,
-            "has_real_time_data": agent_name in ["real_time_market_intelligence_agent", "real_time_insight_monitor_agent"],
+            "has_real_time_data": agent_name
+            in [
+                "real_time_market_intelligence_agent",
+                "real_time_insight_monitor_agent",
+            ],
             "has_visualizations": agent_name == "visual_dashboard_agent",
-            "timestamp": "current_time"
+            "timestamp": "current_time",
         }
         callback_context.state["enhanced_validation_outputs"] = enhanced_outputs
 
     except (AttributeError, IndexError) as e:
-        print(f"[REAL-TIME CALLBACK ERROR] Failed to process output from {agent_name}: {e}")
+        print(
+            f"[REAL-TIME CALLBACK ERROR] Failed to process output from {agent_name}: {e}"
+        )
         return
 
 
@@ -553,7 +591,7 @@ market_research_agent = LlmAgent(
     5. **Customer Signal Detection**: Identify real-time customer discussions and sentiment
 
     **RESEARCH METHODOLOGY:**
-    
+
     **Phase 1: Foundation Research**
     - Extract key industry keywords from the startup idea
     - Use Google Search for fundamental market data (size, growth, segments)
@@ -587,7 +625,7 @@ market_research_agent = LlmAgent(
     - Current customer discussions and sentiment
     - Market timing signals and regulatory changes
 
-    Provide actionable insights that help founders understand both the static market landscape 
+    Provide actionable insights that help founders understand both the static market landscape
     and dynamic market conditions that could impact their timing and strategy.
     """,
     tools=[google_search],
@@ -859,51 +897,84 @@ strategic_synthesis_agent = LlmAgent(
 # Real-Time Market Intelligence Agent
 market_intelligence_agent = LlmAgent(
     name="real_time_market_intelligence_agent",
-    model="gemini-2.0-flash",
+    model="gemini-2.5-flash",
     description="""
     A real-time data integration agent that gathers live market intelligence from multiple sources
     including funding databases, patent offices, social sentiment, and competitive tracking.
     """,
     instruction="""
-    You are a real-time market intelligence specialist who gathers and synthesizes live data
+    You are a real-time market intelligence specialist who gathers and synthesises live data
     to provide current market context for startup validation.
 
-    **DATA SOURCES TO SIMULATE:**
-    1. **Funding Intelligence**: Recent rounds, investor activity, valuation trends
-    2. **Patent Landscape**: Recent filings, IP activity, technology trends  
-    3. **Social Sentiment**: Customer discussions, product feedback, market buzz
-    4. **Competitive Tracking**: Product launches, feature updates, strategic moves
-    5. **Market Timing**: Industry reports, regulatory changes, macro trends
+    **REAL-TIME DATA COLLECTION:**
+    Use Google Search extensively to gather current information:
 
-    **INTELLIGENCE GATHERING APPROACH:**
-    - Use Google Search to find recent funding announcements and investment trends
-    - Search for patent filings and IP activity in the relevant technology space
-    - Look for social media discussions, Reddit threads, and forum conversations
-    - Track competitor announcements, product launches, and strategic moves
-    - Identify regulatory changes or market timing indicators
+    1. **Recent Funding Intelligence**:
+       - Search for "[industry] startup funding 2024 2025"
+       - Look for recent Series A, B, C announcements
+       - Find investor activity and valuation trends
+       - Check TechCrunch, Crunchbase news, VentureBeat
 
-    **ANALYSIS FOCUS:**
-    - Funding patterns: Who's investing in this space? What valuations?
-    - Technology trends: What IP activity suggests about market direction?
-    - Customer signals: What are people saying about existing solutions?
-    - Competitive dynamics: How are competitors positioning and evolving?
-    - Market timing: Are there regulatory or macro factors creating urgency?
+    2. **Competitive Intelligence**:
+       - Search for "[competitor] product launch 2024 2025"
+       - Find recent feature announcements and strategic moves
+       - Look for acquisition news and partnerships
+       - Check company blogs and press releases
 
-    **OUTPUT REQUIREMENTS:**
-    Generate a MarketIntelligence object with:
-    - Recent funding data and investment trends
-    - Patent landscape analysis
-    - Social sentiment and customer discussions
-    - Competitive intelligence updates
-    - Market timing indicators and signals
-    - Data freshness timestamp and confidence assessment
+    3. **Market Timing & Trends**:
+       - Search for "[industry] market trends 2024 2025"
+       - Find regulatory changes and policy updates
+       - Look for technology breakthroughs and innovations
+       - Check industry reports and analyst predictions
 
-    Focus on actionable intelligence that would impact startup validation decisions.
+    4. **Customer Sentiment**:
+       - Search for customer reviews and discussions
+       - Look for Reddit threads and forum conversations
+       - Find social media sentiment and complaints
+       - Check product review sites and feedback
+
+    **SEARCH STRATEGY:**
+    - Use multiple targeted searches for comprehensive coverage
+    - Focus on recent dates (2024-2025) for freshness
+    - Search for specific companies, products, and funding rounds
+    - Look for both positive and negative market signals
+    - Cross-reference information from multiple sources
+
+    **OUTPUT FORMAT:**
+    Structure your response as a comprehensive market intelligence report with:
+
+    ## Recent Funding Data
+    - Latest funding rounds with amounts and investors
+    - Valuation trends and investment patterns
+    - Emerging investor interest areas
+
+    ## Competitive Intelligence
+    - Recent product launches and feature updates
+    - Strategic moves, partnerships, acquisitions
+    - Competitive positioning changes
+
+    ## Market Timing Indicators
+    - Regulatory changes affecting the market
+    - Technology trends and breakthroughs
+    - Economic factors and market conditions
+
+    ## Customer Sentiment Analysis
+    - Current customer discussions and feedback
+    - Pain points and unmet needs identified
+    - Adoption patterns and resistance factors
+
+    ## Strategic Implications
+    - How these findings impact the startup idea
+    - Timing considerations and market windows
+    - Competitive threats and opportunities
+
+    **Data Freshness**: Include timestamps and source reliability for all findings.
+
+    Always search for the most recent information and provide actionable insights based on current market conditions.
     """,
     tools=[google_search],
-    output_schema=MarketIntelligence,
     output_key="market_intelligence",
-    after_agent_callback=progress_tracking_callback,
+    after_agent_callback=real_time_data_callback,
 )
 
 # Real-Time Insight Monitor Agent
@@ -911,7 +982,7 @@ insight_monitor_agent = LlmAgent(
     name="real_time_insight_monitor_agent",
     model="gemini-2.0-flash",
     description="""
-    A monitoring agent that identifies urgent market signals, competitive moves, 
+    A monitoring agent that identifies urgent market signals, competitive moves,
     and time-sensitive opportunities that could impact the startup validation.
     """,
     instruction="""
@@ -920,7 +991,7 @@ insight_monitor_agent = LlmAgent(
 
     **MONITORING FOCUS AREAS:**
     1. **Funding Trends**: Sudden shifts in investor interest or valuation patterns
-    2. **Competitor Moves**: Major product launches, acquisitions, or strategic pivots  
+    2. **Competitor Moves**: Major product launches, acquisitions, or strategic pivots
     3. **Market Shifts**: Regulatory changes, customer behavior changes, technology breakthroughs
     4. **Customer Signals**: Viral discussions, mass complaints, unmet demand signals
     5. **Technology Changes**: New platforms, APIs, or infrastructure that could be game-changing
@@ -945,9 +1016,13 @@ insight_monitor_agent = LlmAgent(
     - Estimate timeline for when action should be taken
 
     Use Google Search to find the most recent and relevant market developments.
+
+    Generate a RealTimeInsights object containing multiple insight entries.
     """,
     tools=[google_search],
-    output_schema=list[RealTimeInsight],
+    output_schema=RealTimeInsights,
+    disallow_transfer_to_parent=True,
+    disallow_transfer_to_peers=True,
     output_key="real_time_insights",
     after_agent_callback=progress_tracking_callback,
 )
@@ -961,7 +1036,7 @@ visual_dashboard_agent = LlmAgent(
     and generates specifications for charts, maps, and interactive dashboards.
     """,
     instruction="""
-    You are a data visualization expert who determines when visual representations would 
+    You are a data visualization expert who determines when visual representations would
     significantly enhance understanding of the startup validation analysis.
 
     **VISUALIZATION DECISION CRITERIA:**
@@ -999,8 +1074,12 @@ visual_dashboard_agent = LlmAgent(
     - Set priority based on importance to validation decision-making
 
     Only recommend visualizations that would materially improve understanding or decision-making.
+
+    Generate a VisualizationRequests object containing multiple visualization request entries.
     """,
-    output_schema=list[VisualizationRequest],
+    output_schema=VisualizationRequests,
+    disallow_transfer_to_parent=True,
+    disallow_transfer_to_peers=True,
     output_key="visualization_requests",
     after_agent_callback=progress_tracking_callback,
 )
@@ -1049,8 +1128,12 @@ data_reliability_agent = LlmAgent(
     - Recommend data quality improvements if needed
 
     Provide transparency about data quality to help users make informed decisions.
+
+    Generate a DataSources object containing multiple data source assessments.
     """,
-    output_schema=list[DataSource],
+    output_schema=DataSources,
+    disallow_transfer_to_parent=True,
+    disallow_transfer_to_peers=True,
     output_key="data_source_assessment",
     after_agent_callback=progress_tracking_callback,
 )
@@ -1145,7 +1228,7 @@ intelligent_router_agent = LlmAgent(
     - Executive presentation or investor pitch preparation
 
     **AGENT SELECTION LOGIC:**
-    
+
     **Always Include:**
     - Conversational Intake Agent
     - Idea Classifier Agent
@@ -1421,6 +1504,39 @@ progress_agent = LlmAgent(
     after_agent_callback=progress_tracking_callback,
 )
 
+# Web Research Agent (feeds data to structured agents)
+web_research_agent = LlmAgent(
+    name="web_research_agent",
+    model="gemini-2.5-flash",
+    description="""
+    A dedicated web research agent that gathers real-time market data and news
+    to support other agents with current information.
+    """,
+    instruction="""
+    You are a web research specialist who gathers current market data and news
+    to support startup validation with real-time information.
+
+    **RESEARCH AREAS:**
+    1. **Recent Industry News**: Latest developments, announcements, trends
+    2. **Funding Activity**: Recent rounds, investor moves, valuation data
+    3. **Competitive Moves**: Product launches, strategic announcements
+    4. **Customer Sentiment**: Reviews, discussions, social media buzz
+    5. **Regulatory Changes**: Policy updates, compliance requirements
+
+    **SEARCH STRATEGY:**
+    - Use targeted searches with current dates (2024-2025)
+    - Search multiple sources: TechCrunch, VentureBeat, industry publications
+    - Look for both mainstream news and niche industry sources
+    - Cross-reference information for accuracy
+    - Focus on actionable intelligence for startup validation
+
+    Provide comprehensive research findings that other agents can use for analysis.
+    """,
+    tools=[google_search],
+    output_key="web_research_data",
+    after_agent_callback=progress_tracking_callback,
+)
+
 
 # --- Existing Agents (keeping original functionality) ---
 
@@ -1448,6 +1564,7 @@ enhanced_ux_pipeline = SequentialAgent(
         product_dev_agent,
         scenario_planning_agent,
         # Real-time data agents (activated based on routing decisions)
+        web_research_agent,  # Gather live data first
         market_intelligence_agent,
         insight_monitor_agent,
         data_reliability_agent,
