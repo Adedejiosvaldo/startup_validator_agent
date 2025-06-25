@@ -1543,51 +1543,312 @@ web_research_agent = LlmAgent(
 
 # --- Existing Agents (keeping original functionality) ---
 
-# Enhanced UX Validation Pipeline with Real-Time Data Integration
-enhanced_ux_pipeline = SequentialAgent(
-    name="enhanced_ux_validation_pipeline",
-    description="""
-    An intelligent startup validation pipeline with conversational intake, dynamic routing,
-    real-time data integration, and adaptive visualization based on complexity and needs.
-    """,
-    sub_agents=[
-        conversational_intake_agent,
-        idea_classifier_agent,  # Keep original for backwards compatibility
-        intelligent_router_agent,  # Enhanced routing with real-time data decisions
-        progress_agent,
-        # Core validation agents
-        idea_critique_agent,
-        market_research_agent,  # Enhanced with real-time data integration
-        painpoint_agent,
-        anti_pattern_agent,
-        evidence_scoring_agent,
-        pmf_agent,
-        investor_agent,
-        mvp_agent,
-        product_dev_agent,
-        scenario_planning_agent,
-        # Real-time data agents (activated based on routing decisions)
-        web_research_agent,  # Gather live data first
-        market_intelligence_agent,
-        insight_monitor_agent,
-        data_reliability_agent,
-        # Visualization and clarification
-        visual_dashboard_agent,
-        clarification_agent,
-        # Quality control and synthesis
-        LoopAgent(
-            name="validation_quality_loop",
-            max_iterations=2,
-            sub_agents=[
-                validation_evaluator,
-                ValidationQualityChecker(name="quality_checker"),
-                enhanced_analysis_agent,
-            ],
-        ),
-        strategic_synthesis_agent,
-        summary_agent,
-        final_report_agent,
-    ],
+
+# Enhanced Interactive Startup Validator with Dynamic Pipeline & Real-Time Data
+class IntelligentValidationOrchestrator(BaseAgent):
+    """
+    Advanced validation orchestrator that respects routing decisions, executes agents
+    in optimal order (parallel where possible), and provides real-time progress updates.
+
+    This solves the core UX problem: instead of running ALL agents, it actually
+    executes only the intelligently selected ones based on idea characteristics.
+    """
+
+    def __init__(self, name: str = "intelligent_validation_orchestrator"):
+        super().__init__(name=name)
+
+        # Registry of all available validation agents
+        self._agent_registry = {
+            # Core UX agents - always executed
+            "conversational_intake_agent": conversational_intake_agent,
+            "intelligent_router_agent": intelligent_router_agent,
+            "progress_agent": progress_agent,
+            # Core validation agents - selected based on routing
+            "idea_critique_agent": idea_critique_agent,
+            "market_research_agent": market_research_agent,
+            "painpoint_agent": painpoint_agent,
+            "pmf_agent": pmf_agent,
+            "investor_agent": investor_agent,
+            "mvp_agent": mvp_agent,
+            "product_dev_agent": product_dev_agent,
+            # Enhanced intelligence agents - selected for complex ideas
+            "anti_pattern_agent": anti_pattern_agent,
+            "evidence_scoring_agent": evidence_scoring_agent,
+            "scenario_planning_agent": scenario_planning_agent,
+            "clarification_agent": clarification_agent,
+            # Real-time data agents - selected for competitive/fast-moving markets
+            "web_research_agent": web_research_agent,
+            "market_intelligence_agent": market_intelligence_agent,
+            "insight_monitor_agent": insight_monitor_agent,
+            "data_reliability_agent": data_reliability_agent,
+            "visual_dashboard_agent": visual_dashboard_agent,
+            # Quality control and synthesis - always executed
+            "validation_evaluator": validation_evaluator,
+            "enhanced_analysis_agent": enhanced_analysis_agent,
+            "strategic_synthesis_agent": strategic_synthesis_agent,
+            "summary_agent": summary_agent,
+            "final_report_agent": final_report_agent,
+        }
+
+    async def _run_async_impl(
+        self, ctx: InvocationContext
+    ) -> AsyncGenerator[Event, None]:
+        """Execute intelligent validation with TRUE dynamic routing."""
+
+        try:
+            # Phase 1: Discovery and Routing (Always Required)
+            yield Event(
+                author=self.name,
+                content="🎯 **Intelligent Startup Validation** - Dynamic routing enabled",
+            )
+
+            # Step 1: Guided discovery to understand the idea deeply
+            yield Event(
+                author=self.name,
+                content="📝 **Phase 1**: Conducting guided discovery...",
+            )
+            async for event in self._execute_agent("conversational_intake_agent", ctx):
+                yield event
+
+            # Step 2: Generate intelligent routing plan based on idea characteristics
+            yield Event(
+                author=self.name,
+                content="🧠 **Phase 2**: Generating intelligent routing plan...",
+            )
+            async for event in self._execute_agent("intelligent_router_agent", ctx):
+                yield event
+
+            # Step 3: Extract and validate routing decisions
+            routing_plan = self._extract_routing_plan(ctx)
+            yield Event(
+                author=self.name,
+                content=f"📋 **Routing Complete**: {len(routing_plan['selected_agents'])} agents selected\n"
+                f"💡 **Reasoning**: {routing_plan['reasoning'][:200]}...",
+            )
+
+            # Phase 2: Execute ONLY Selected Validation Agents
+            yield Event(
+                author=self.name,
+                content="🚀 **Phase 3**: Executing selected validation agents...",
+            )
+            async for event in self._execute_intelligent_validation(ctx, routing_plan):
+                yield event
+
+            # Phase 3: Quality Control (Adaptive)
+            yield Event(
+                author=self.name,
+                content="🔍 **Phase 4**: Quality control and enhancement...",
+            )
+            async for event in self._execute_quality_control(ctx):
+                yield event
+
+            # Phase 4: Strategic Synthesis
+            yield Event(
+                author=self.name,
+                content="🎯 **Phase 5**: Strategic synthesis and insights...",
+            )
+            async for event in self._execute_synthesis(ctx):
+                yield event
+
+            # Success completion
+            yield Event(
+                author=self.name,
+                content="✅ **Validation Complete!** Intelligent routing delivered personalised insights.",
+            )
+
+        except Exception as e:
+            logging.error(f"Orchestrator error: {e}")
+            yield Event(
+                author=self.name,
+                content=f"❌ **Error**: {str(e)} - Falling back to core validation",
+            )
+            async for event in self._execute_fallback_validation(ctx):
+                yield event
+
+    def _extract_routing_plan(self, ctx: InvocationContext) -> dict:
+        """Extract routing plan from session state with intelligent fallbacks."""
+        # Primary: Get intelligent routing plan
+        routing_plan = ctx.session.state.get("intelligent_routing_plan", {})
+
+        # Fallback: Get basic routing plan
+        if not routing_plan or not routing_plan.get("selected_agents"):
+            routing_plan = ctx.session.state.get("basic_routing_plan", {})
+
+        # Final fallback: Create minimal validation plan
+        if not routing_plan or not routing_plan.get("selected_agents"):
+            logging.warning("No routing plan found, creating minimal validation plan")
+            routing_plan = {
+                "selected_agents": [
+                    "idea_critique_agent",
+                    "market_research_agent",
+                    "painpoint_agent",
+                    "pmf_agent",
+                ],
+                "reasoning": "Minimal validation plan - core agents only due to routing failure",
+                "estimated_duration": "10-15 minutes",
+                "parallel_groups": [
+                    ["idea_critique_agent", "painpoint_agent"],
+                    ["market_research_agent", "pmf_agent"],
+                ],
+            }
+
+        # Store routing plan for progress tracking
+        ctx.session.state["active_routing_plan"] = routing_plan
+        return routing_plan
+
+    async def _execute_intelligent_validation(
+        self, ctx: InvocationContext, routing_plan: dict
+    ):
+        """Execute ONLY the intelligently selected agents - this is the key improvement."""
+        selected_agents = routing_plan.get("selected_agents", [])
+        parallel_groups = routing_plan.get("parallel_groups", [])
+
+        # Show what's being executed and what's being skipped
+        all_possible_agents = set(self._agent_registry.keys()) - {
+            "conversational_intake_agent",
+            "intelligent_router_agent",
+            "progress_agent",
+            "validation_evaluator",
+            "enhanced_analysis_agent",
+            "strategic_synthesis_agent",
+            "summary_agent",
+            "final_report_agent",
+        }
+        skipped_agents = all_possible_agents - set(selected_agents)
+
+        yield Event(
+            author=self.name,
+            content=f"✅ **Executing**: {', '.join(selected_agents[:3])}{'...' if len(selected_agents) > 3 else ''}\n"
+            f"⏭️ **Skipping**: {len(skipped_agents)} agents (not needed for this idea type)",
+        )
+
+        # Execute selected agents intelligently
+        if parallel_groups and len(parallel_groups) > 0:
+            async for event in self._execute_in_parallel_groups(ctx, parallel_groups):
+                yield event
+        else:
+            async for event in self._execute_sequentially(ctx, selected_agents):
+                yield event
+
+    async def _execute_in_parallel_groups(
+        self, ctx: InvocationContext, parallel_groups: list
+    ):
+        """Execute agents in parallel groups for optimal performance."""
+        for group_idx, agent_group in enumerate(parallel_groups):
+            if not agent_group:  # Skip empty groups
+                continue
+
+            if len(agent_group) > 1:
+                yield Event(
+                    author=self.name,
+                    content=f"⚡ **Parallel Group {group_idx + 1}**: {', '.join(agent_group)}",
+                )
+
+            # Execute agents in this group (sequential for now, could be made truly parallel)
+            for agent_name in agent_group:
+                if agent_name in self._agent_registry:
+                    async for event in self._execute_agent_safely(agent_name, ctx):
+                        yield event
+                else:
+                    logging.warning(f"Agent {agent_name} not found in registry")
+
+    async def _execute_sequentially(
+        self, ctx: InvocationContext, selected_agents: list
+    ):
+        """Execute agents sequentially with progress updates."""
+        for idx, agent_name in enumerate(selected_agents):
+            yield Event(
+                author=self.name,
+                content=f"🔍 **Agent {idx + 1}/{len(selected_agents)}**: {agent_name}",
+            )
+            async for event in self._execute_agent_safely(agent_name, ctx):
+                yield event
+
+    async def _execute_quality_control(self, ctx: InvocationContext):
+        """Adaptive quality control based on validation results."""
+        # Always evaluate validation quality
+        async for event in self._execute_agent_safely("validation_evaluator", ctx):
+            yield event
+
+        # Check if enhancement is needed
+        evaluation_result = ctx.session.state.get("validation_evaluation", {})
+        if evaluation_result.get("grade") == "fail":
+            improvement_areas = evaluation_result.get("improvement_areas", [])
+            yield Event(
+                author=self.name,
+                content=f"🔧 **Enhancement Needed**: Addressing {len(improvement_areas)} gaps",
+            )
+            async for event in self._execute_agent_safely(
+                "enhanced_analysis_agent", ctx
+            ):
+                yield event
+        else:
+            yield Event(
+                author=self.name,
+                content="✅ **Quality Approved**: Validation meets standards",
+            )
+
+    async def _execute_synthesis(self, ctx: InvocationContext):
+        """Execute strategic synthesis and final reporting."""
+        async for event in self._execute_agent_safely("strategic_synthesis_agent", ctx):
+            yield event
+        async for event in self._execute_agent_safely("summary_agent", ctx):
+            yield event
+
+    async def _execute_agent_safely(self, agent_name: str, ctx: InvocationContext):
+        """Execute a single agent with error handling and progress tracking."""
+        if agent_name not in self._agent_registry:
+            logging.error(f"Agent {agent_name} not found in registry")
+            return
+
+        try:
+            agent = self._agent_registry[agent_name]
+            async for event in agent._run_async_impl(ctx):
+                yield event
+
+            # Update progress tracking
+            progress_state = ctx.session.state.get("progress_tracking", {})
+            completed_agents = progress_state.get("completed_agents", [])
+            if agent_name not in completed_agents:
+                completed_agents.append(agent_name)
+                progress_state["completed_agents"] = completed_agents
+                ctx.session.state["progress_tracking"] = progress_state
+
+        except Exception as e:
+            logging.error(f"Error executing {agent_name}: {e}")
+            yield Event(
+                author=self.name,
+                content=f"⚠️ **{agent_name}** encountered an issue - continuing validation",
+            )
+
+    async def _execute_fallback_validation(self, ctx: InvocationContext):
+        """Fallback validation in case of routing failures."""
+        yield Event(
+            author=self.name, content="🛡️ **Fallback Mode**: Core validation only"
+        )
+
+        core_agents = [
+            "idea_critique_agent",
+            "market_research_agent",
+            "painpoint_agent",
+            "pmf_agent",
+            "summary_agent",
+        ]
+
+        for agent_name in core_agents:
+            async for event in self._execute_agent_safely(agent_name, ctx):
+                yield event
+
+    async def _execute_agent(self, agent_name: str, ctx: InvocationContext):
+        """Execute agent without progress tracking (for core agents)."""
+        if agent_name in self._agent_registry:
+            async for event in self._agent_registry[agent_name]._run_async_impl(ctx):
+                yield event
+
+
+# Enhanced UX Validation Pipeline with TRUE Dynamic Routing
+enhanced_ux_pipeline = IntelligentValidationOrchestrator(
+    name="enhanced_ux_validation_pipeline"
 )
 
 # Enhanced Interactive Startup Validator with Dynamic Pipeline & Real-Time Data
@@ -1648,60 +1909,4 @@ enhanced_startup_validator = LlmAgent(
     """,
 )
 
-
-# Create dynamic validation pipeline instance (simpler version for now)
-class SimpleDynamicPipeline(SequentialAgent):
-    """Simplified dynamic pipeline that uses intelligent routing."""
-
-    def __init__(self):
-        super().__init__(
-            name="simplified_dynamic_pipeline",
-            sub_agents=[
-                conversational_intake_agent,
-                intelligent_router_agent,
-                progress_agent,
-                idea_critique_agent,
-                market_research_agent,
-                painpoint_agent,
-                anti_pattern_agent,
-                evidence_scoring_agent,
-                pmf_agent,
-                investor_agent,
-                scenario_planning_agent,
-                validation_evaluator,
-                strategic_synthesis_agent,
-                summary_agent,
-            ],
-        )
-
-
-# Create the simplified pipeline instance
-simplified_dynamic_pipeline = SimpleDynamicPipeline()
-
-# === UX PATTERN VALIDATION SUMMARY ===
-#
-# The UX patterns established in UX_IMPLEMENTATION_SUMMARY.md are MOSTLY VALID and implemented:
-#
-# ✅ WORKING WELL:
-# - Conversational Intake Agent: ✓ Fully implemented with proper IdeaProfile output
-# - Anti-Pattern Detection: ✓ Comprehensive failure mode detection
-# - Evidence-Based Scoring: ✓ Data-backed assessments with sources
-# - Scenario Planning: ✓ Multiple timeline stress testing
-# - Interactive Clarification: ✓ Gap identification and questions
-# - Real-Time Data Integration: ✓ Market intelligence and monitoring
-# - Visual Dashboard: ✓ Intelligent visualization recommendations
-# - Progress Tracking: ✓ Comprehensive callbacks and updates
-# - Enhanced State Management: ✓ Proper tracking across all dimensions
-#
-# 🔧 NEEDS FIXING:
-# - Pipeline Orchestration: Currently runs ALL agents instead of intelligent routing
-# - Dynamic Agent Selection: Routing decisions not properly executed
-# - Agent Coordination: Sequential execution should respect routing plan
-#
-# 📊 CONCLUSION:
-# UX patterns are valid and well-implemented. Main issue is execution orchestration,
-# not the fundamental UX design. The enhanced validator provides excellent user experience
-# when routing is properly implemented.
-#
-# The system successfully transforms from static analysis tool to intelligent validation consultant
-# with personalised, progressive, and actionable guidance for entrepreneurs.
+root_agent = enhanced_startup_validator
