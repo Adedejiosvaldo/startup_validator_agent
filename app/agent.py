@@ -13,6 +13,160 @@ from google.genai import types as genai_types
 from pydantic import BaseModel, Field
 
 
+# --- Enhanced Structured Output Models for UX Improvements ---
+class IdeaProfile(BaseModel):
+    """Model for capturing detailed idea characteristics and context."""
+
+    idea_description: str = Field(description="The core startup idea description")
+    idea_maturity: Literal["concept", "prototype", "early_traction", "scaling"] = Field(
+        description="Stage of idea development"
+    )
+    industry_category: str = Field(description="Primary industry or category")
+    target_market: str = Field(description="Target customer segment")
+    founder_background: str = Field(description="Founder's experience and expertise")
+    specific_concerns: list[str] = Field(
+        default_factory=list,
+        description="Specific areas the founder is most worried about",
+    )
+    business_model: str | None = Field(
+        default=None, description="Proposed business model"
+    )
+    competitive_landscape_known: bool = Field(
+        default=False, description="Whether founder has done competitive research"
+    )
+
+
+class UserPreferences(BaseModel):
+    """Model for capturing user preferences and validation requirements."""
+
+    founder_experience_level: Literal["first_time", "experienced", "serial"] = Field(
+        description="Founder's startup experience level"
+    )
+    validation_depth: Literal["quick", "standard", "comprehensive"] = Field(
+        default="standard",
+        description="Desired depth of validation analysis",
+    )
+    focus_areas: list[str] = Field(
+        default_factory=list,
+        description="Specific validation areas to emphasise",
+    )
+    communication_style: Literal["technical", "business", "simple"] = Field(
+        default="business",
+        description="Preferred communication style",
+    )
+    time_available: Literal["quick_15min", "standard_30min", "deep_60min"] = Field(
+        default="standard_30min",
+        description="Time available for validation process",
+    )
+
+
+class ProgressUpdate(BaseModel):
+    """Model for tracking validation progress and providing updates."""
+
+    current_stage: str = Field(description="Current validation stage")
+    progress_percentage: int = Field(description="Progress completion percentage")
+    insights_discovered: list[str] = Field(
+        default_factory=list,
+        description="Key insights discovered so far",
+    )
+    next_stage: str = Field(description="Next validation stage")
+    estimated_time_remaining: str = Field(description="Estimated time to completion")
+
+
+class RoutingPlan(BaseModel):
+    """Model for dynamic agent routing based on idea characteristics."""
+
+    selected_agents: list[str] = Field(
+        description="Agents selected for this validation"
+    )
+    parallel_groups: list[list[str]] = Field(
+        default_factory=list,
+        description="Groups of agents that can run in parallel",
+    )
+    sequential_dependencies: dict[str, list[str]] = Field(
+        default_factory=dict,
+        description="Agent dependencies requiring sequential execution",
+    )
+    estimated_duration: str = Field(description="Estimated total validation time")
+    reasoning: str = Field(description="Reasoning for the routing decisions")
+
+
+class ClarificationQuestion(BaseModel):
+    """Model for interactive clarification questions."""
+
+    question: str = Field(description="The clarification question to ask")
+    question_type: Literal[
+        "market", "technical", "business_model", "customer", "competition"
+    ] = Field(description="Category of the question")
+    importance: Literal["critical", "important", "nice_to_have"] = Field(
+        description="Importance level of getting this information"
+    )
+    suggested_research: str | None = Field(
+        default=None,
+        description="Suggested research approach if user doesn't know",
+    )
+
+
+class AntiPattern(BaseModel):
+    """Model for detecting startup anti-patterns and failure modes."""
+
+    pattern_name: str = Field(description="Name of the anti-pattern")
+    severity: Literal["low", "medium", "high", "critical"] = Field(
+        description="Severity level of the anti-pattern"
+    )
+    description: str = Field(description="Description of the anti-pattern")
+    evidence: list[str] = Field(
+        description="Evidence supporting this pattern detection"
+    )
+    mitigation_strategies: list[str] = Field(
+        description="Strategies to mitigate this anti-pattern"
+    )
+    success_examples: list[str] = Field(
+        default_factory=list,
+        description="Examples of startups that overcame similar patterns",
+    )
+
+
+class EvidenceBasedScore(BaseModel):
+    """Model for evidence-backed scoring instead of subjective ratings."""
+
+    dimension: str = Field(description="What is being scored")
+    confidence_level: Literal["low", "medium", "high"] = Field(
+        description="Confidence in the assessment"
+    )
+    evidence_points: list[str] = Field(
+        description="Specific evidence supporting the score"
+    )
+    data_sources: list[str] = Field(description="Sources of the evidence")
+    comparable_companies: list[str] = Field(
+        default_factory=list,
+        description="Similar companies used for benchmarking",
+    )
+    risk_factors: list[str] = Field(description="Factors that could affect the score")
+    upside_potential: str = Field(description="Potential positive scenarios")
+    downside_risks: str = Field(description="Potential negative scenarios")
+
+
+class ScenarioAnalysis(BaseModel):
+    """Model for scenario planning and stress testing."""
+
+    scenario_name: str = Field(description="Name of the scenario")
+    scenario_type: Literal["best_case", "worst_case", "most_likely", "stress_test"] = (
+        Field(description="Type of scenario analysis")
+    )
+    probability: float = Field(
+        description="Estimated probability of this scenario (0-1)"
+    )
+    key_assumptions: list[str] = Field(description="Key assumptions for this scenario")
+    market_conditions: str = Field(description="Market conditions in this scenario")
+    competitive_response: str = Field(description="Expected competitive response")
+    financial_implications: str = Field(description="Financial impact of this scenario")
+    strategic_recommendations: list[str] = Field(
+        description="Recommended actions for this scenario"
+    )
+    success_metrics: list[str] = Field(description="Metrics to track for this scenario")
+
+
 # --- Structured Output Models ---
 class ScoringResult(BaseModel):
     """Model for the output of the scoring agent."""
@@ -58,7 +212,73 @@ class ValidationFeedback(BaseModel):
     )
 
 
-# --- Callbacks ---
+# --- Enhanced Callbacks for UX Improvements ---
+def progress_tracking_callback(callback_context: CallbackContext) -> None:
+    """Enhanced callback that tracks validation progress and provides real-time updates."""
+    # Get agent name from the invocation context
+    agent_name = (
+        callback_context._invocation_context.agent.name
+        if callback_context._invocation_context.agent.name
+        else "unknown_agent"
+    )
+
+    # Update progress tracking
+    progress_state = callback_context.state.get("progress_tracking", {})
+    completed_agents = progress_state.get("completed_agents", [])
+
+    if agent_name not in completed_agents:
+        completed_agents.append(agent_name)
+        progress_state["completed_agents"] = completed_agents
+
+        # Calculate progress percentage based on routing plan
+        routing_plan = callback_context.state.get("routing_plan", {})
+        total_agents = (
+            len(routing_plan.get("selected_agents", [])) if routing_plan else 8
+        )
+        progress_percentage = int((len(completed_agents) / total_agents) * 100)
+
+        progress_state["current_percentage"] = progress_percentage
+        progress_state["last_completed_agent"] = agent_name
+        progress_state["timestamp"] = (
+            "current_time"  # Would use actual timestamp in production
+        )
+
+        callback_context.state["progress_tracking"] = progress_state
+
+    # Get the latest event from the session
+    session = callback_context._invocation_context.session
+    if not session.events:
+        return
+
+    latest_event = session.events[-1]
+    if not latest_event.content or not latest_event.content.parts:
+        return
+
+    # Extract insights for progressive disclosure
+    try:
+        output_text = latest_event.content.parts[0].text
+
+        # Store interim insights for progressive disclosure
+        interim_insights = callback_context.state.get("interim_insights", [])
+
+        # Extract key insight (simplified - would use more sophisticated extraction in production)
+        if len(output_text) > 100:  # Only extract insights from substantial outputs
+            insight_summary = (
+                output_text[:200] + "..." if len(output_text) > 200 else output_text
+            )
+            interim_insights.append(
+                {
+                    "agent": agent_name,
+                    "insight": insight_summary,
+                    "timestamp": "current_time",
+                }
+            )
+            callback_context.state["interim_insights"] = interim_insights
+
+    except (AttributeError, IndexError):
+        return
+
+
 def collect_validation_results_callback(callback_context: CallbackContext) -> None:
     """Collects the structured outputs from the validation agents."""
     # Get agent name from the invocation context
@@ -185,7 +405,7 @@ market_research_agent = LlmAgent(
     Always rely on Google Search for the most up-to-date market information, and make sure to extract keywords that best represent the core of the idea.
     """,
     tools=[google_search],
-    after_agent_callback=enhance_validation_callback,
+    after_agent_callback=progress_tracking_callback,
 )
 
 
@@ -209,7 +429,7 @@ idea_critique_agent = LlmAgent(
     - Insights into potential competitive or execution risks
     Analyze based on viability, novelty, and scalability.
     """,
-    after_agent_callback=enhance_validation_callback,
+    after_agent_callback=progress_tracking_callback,
 )
 
 
@@ -228,7 +448,7 @@ product_dev_agent = LlmAgent(
     - Map out a phased development roadmap
     - Recommend tech stacks or approaches where needed
     """,
-    after_agent_callback=enhance_validation_callback,
+    after_agent_callback=progress_tracking_callback,
 )
 
 # MVP Agent
@@ -246,10 +466,10 @@ mvp_agent = LlmAgent(
     - Ensure the MVP is aligned with the target audience and value proposition
     """,
     tools=[google_search],
-    after_agent_callback=enhance_validation_callback,
+    after_agent_callback=progress_tracking_callback,
 )
 
-# Scoring Agent
+# Scoring Agent (kept for backwards compatibility)
 scoring_agent = LlmAgent(
     name="startup_scoring_agent",
     model="gemini-2.5-flash",
@@ -266,11 +486,11 @@ scoring_agent = LlmAgent(
     - Scalability
     Provide a rationale for each score.
     """,
-    # tools=[google_search],
     output_schema=ScoringResult,
-    after_agent_callback=enhance_validation_callback,
+    disallow_transfer_to_parent=True,
+    disallow_transfer_to_peers=True,
+    after_agent_callback=progress_tracking_callback,
 )
-
 
 # Investor Agent
 investor_agent = LlmAgent(
@@ -288,7 +508,9 @@ investor_agent = LlmAgent(
     - Giving a mock "invest or pass" verdict with reasons
     """,
     output_schema=InvestorVerdict,
-    after_agent_callback=enhance_validation_callback,
+    disallow_transfer_to_parent=True,
+    disallow_transfer_to_peers=True,
+    after_agent_callback=progress_tracking_callback,
 )
 
 # Possible Product Market Fit Agent
@@ -303,18 +525,19 @@ pmf_agent = LlmAgent(
     product-market fit based on user needs, demand signals, and solution fit.
     """,
     instruction="""
-    Determine if there is strong alignment between the target user’s pain points and the proposed solution.
+    Determine if there is strong alignment between the target user's pain points and the proposed solution.
     - Identify demand signals
     - Check how differentiated the solution is
     - Assess willingness to pay or adopt
     Provide a product-market fit confidence rating (Low, Medium, High)
     """,
     output_schema=PmfConfidence,
-    after_agent_callback=enhance_validation_callback,
+    disallow_transfer_to_parent=True,
+    disallow_transfer_to_peers=True,
+    after_agent_callback=progress_tracking_callback,
 )
 
-
-# customer painpoint
+# Customer painpoint
 painpoint_agent = LlmAgent(
     name="startup_customer_painpoint_agent",
     model="gemini-2.5-flash",
@@ -332,9 +555,8 @@ painpoint_agent = LlmAgent(
     - Pinpoint frustrations or inefficiencies
     - Suggest ways the product could directly address these issues
     """,
-    after_agent_callback=enhance_validation_callback,
+    after_agent_callback=progress_tracking_callback,
 )
-
 
 # Validation Quality Evaluator Agent
 validation_evaluator = LlmAgent(
@@ -390,7 +612,7 @@ enhanced_analysis_agent = LlmAgent(
     """,
     tools=[google_search],
     output_key="enhanced_analysis",
-    after_agent_callback=enhance_validation_callback,
+    after_agent_callback=progress_tracking_callback,
 )
 
 # Summary Agent
@@ -410,86 +632,7 @@ summary_agent = LlmAgent(
     - `validation_evaluation` - quality assessment feedback
     - `enhanced_analysis` - additional insights if improvements were made
 
-    **YOUR STRATEGIC APPROACH:**
-
-    1. **SYNTHESIZE, DON'T SUMMARIZE**: Connect insights across different validation dimensions to reveal hidden patterns, conflicts, and synergies
-
-    2. **TELL A COMPELLING STORY**: Craft a narrative that shows the startup's journey from idea to market reality
-
-    3. **PROVIDE STRATEGIC INTELLIGENCE**: Go beyond data extraction to offer strategic recommendations based on interconnected insights
-
-    4. **IDENTIFY CRITICAL SUCCESS FACTORS**: Pinpoint the 2-3 make-or-break factors that will determine success
-
-    5. **CREATE ACTIONABLE PATHWAYS**: Design concrete next steps that address multiple validation concerns simultaneously
-
-    **CREATIVE SYNTHESIS TECHNIQUES:**
-    - Look for convergent themes across different analyses
-    - Identify contradictions that reveal hidden risks or opportunities
-    - Connect customer pain points directly to competitive advantages
-    - Link market trends to implementation strategies
-    - Correlate investment appeal with technical feasibility
-
-    **GENERATE A STRATEGIC VALIDATION REPORT:**
-
-    ## 🎯 STRATEGIC VALIDATION NARRATIVE
-
-    **The Big Picture**: Create a compelling 2-3 paragraph story that weaves together market opportunity, customer pain, competitive dynamics, and solution potential. Focus on the strategic narrative rather than listing facts.
-
-    **Critical Success Equation**: Identify the 2-3 interconnected factors that will make or break this venture (e.g., "Success = Enterprise Trust × Technical Differentiation × Go-to-Market Excellence").
-
-    **Strategic Positioning**: Based on all analyses, define where this startup should position itself in the market ecosystem to maximize competitive advantage.
-
-    ## 🔥 CONVERGED INSIGHTS & CONTRADICTIONS
-
-    **Where All Analyses Align**: Highlight the strongest convergent themes across validation dimensions (what everyone agrees on).
-
-    **Critical Tensions**: Identify contradictions between different analyses (e.g., high market potential vs. intense competition) and resolve them with strategic recommendations.
-
-    **Hidden Connections**: Reveal non-obvious links between customer pain points, market gaps, and technical capabilities.
-
-    ## 📊 INTELLIGENT METRICS SYNTHESIS
-
-    **Validation Confidence Score**: [X]/10 - A synthesized score based on convergent evidence across all dimensions
-
-    **Market-Product-Execution Triangle**:
-    - Market Readiness: [score] - How ready is the market for this solution?
-    - Product Viability: [score] - How feasible is building a differentiated product?
-    - Execution Probability: [score] - How likely is successful execution given constraints?
-
-    **Investment Thesis**: Distill the investor perspective into a clear 1-2 sentence thesis
-
-    ## 🚀 STRATEGIC PATHWAY FORWARD
-
-    **The Critical Path**: Design a strategic sequence that addresses multiple validation concerns simultaneously (not just a task list).
-
-    **Validation Cascade**: Identify which assumptions, if proven, would de-risk multiple other concerns.
-
-    **Strategic Experiments**: Propose 2-3 focused experiments that could validate core hypotheses and build competitive advantage.
-
-    ## ⚡ COMPETITIVE BATTLE PLAN
-
-    **Differentiation Strategy**: Based on market analysis and pain points, define how to win against both direct competitors and "build vs. buy" mentality.
-
-    **Moat Building**: Connect MVP features to long-term defensibility.
-
-    **Market Entry Wedge**: Identify the specific market segment/use case that offers the highest probability of initial success.
-
-    ## 🎲 RISK MATRIX & MITIGATION
-
-    **Interconnected Risk Assessment**: Show how different risks compound or mitigate each other.
-
-    **Strategic Risk Mitigation**: Propose strategies that address multiple risk categories simultaneously.
-
-    ## 💡 CREATIVE STRATEGIC OPTIONS
-
-    Based on the complete analysis, propose 2-3 creative strategic alternatives beyond the obvious path (e.g., vertical specialization, partnership models, platform strategies).
-
-    **FORMATTING PRINCIPLES:**
-    - Lead with insights, not data
-    - Connect dots across different validation dimensions
-    - Use strategic frameworks and business concepts
-    - Focus on decision-making guidance
-    - Make every section actionable and interconnected
+    Generate a comprehensive strategic validation report with insights and recommendations.
     """,
     output_key="final_startup_report",
 )
@@ -504,110 +647,7 @@ final_report_agent = LlmAgent(
     """,
     instruction="""
     You are an elite business intelligence specialist who creates executive-level startup reports
-    that drive strategic decision-making. Your reports are known for their clarity, insight, and actionability.
-
-    **ACCESS COMPREHENSIVE ANALYSIS:**
-    - `all_validation_outputs` - complete validation analysis
-    - `strategic_synthesis` - strategic synthesis and breakthrough insights
-    - `final_startup_report` - comprehensive validation report
-
-    **YOUR MISSION**: Transform detailed analysis into a compelling executive brief that tells a complete story and guides decision-making.
-
-    **CREATIVE REPORT FORMAT:**
-
-    # 🚀 Startup Intelligence Brief: [STARTUP NAME]
-
-    ## 📋 EXECUTIVE DECISION FRAMEWORK
-
-    **The Bottom Line**: [One compelling sentence: Should you pursue this opportunity?]
-
-    **Strategic Verdict**: PURSUE / REFINE / PIVOT / ABANDON
-
-    **Confidence Level**: [High/Medium/Low] based on convergent evidence
-
-    **Critical Success Factors**: The 2-3 make-or-break elements that determine success
-
-    ## 🎯 THE STRATEGIC STORY
-
-    **Market Moment**: Why now? What market forces create this opportunity?
-
-    **Customer Reality**: What's really driving customer pain and willingness to pay?
-
-    **Competitive Landscape**: Where do you fit and how do you win?
-
-    **Your Advantage**: What makes this venture uniquely positioned to succeed?
-
-    ## 📊 INTELLIGENCE SCORECARD
-
-    | Dimension | Score | Strategic Implication |
-    |-----------|-------|---------------------|
-    | Market Opportunity | X/10 | [Key insight] |
-    | Technical Feasibility | X/10 | [Key insight] |
-    | Competitive Position | X/10 | [Key insight] |
-    | Execution Probability | X/10 | [Key insight] |
-    | **Overall Validation** | **X/10** | **[Overall assessment]** |
-
-    ## 🎪 THE INVESTMENT STORY
-
-    **Investor Perspective**: [Investment verdict and reasoning]
-
-    **Value Creation Thesis**: How this startup creates and captures value
-
-    **Risk-Return Profile**: What investors see as the upside and downside
-
-    ## 🚀 GO-TO-MARKET BLUEPRINT
-
-    **Market Entry Strategy**: How to get your first customers
-
-    **MVP Battle Plan**: What to build first and why
-
-    **Scaling Pathway**: How early success leads to market dominance
-
-    ## ⚡ BREAKTHROUGH OPPORTUNITIES
-
-    **Strategic Insights**: Non-obvious opportunities discovered through synthesis
-
-    **Competitive Jujitsu**: How to turn challenges into advantages
-
-    **Expansion Vectors**: Where this leads in 3-5 years
-
-    ## 🎯 90-DAY ACTION PLAN
-
-    **Week 1-2: Foundation**
-    - [ ] [Specific immediate actions]
-
-    **Week 3-8: Validation**
-    - [ ] [Key experiments and validations]
-
-    **Week 9-12: Launch Prep**
-    - [ ] [Building and preparing for market]
-
-    ## 🚨 CRITICAL WATCH-OUTS
-
-    **Execution Risks**: What could derail progress
-
-    **Market Risks**: External factors to monitor
-
-    **Competitive Threats**: How competitors might respond
-
-    ## 🔮 STRATEGIC OPTIONS
-
-    **Plan A**: [Primary recommended strategy]
-
-    **Plan B**: [Alternative approach if Plan A faces challenges]
-
-    **Plan C**: [Pivot strategy if market conditions change]
-
-    ---
-
-    **Final Word**: [Compelling closing statement that synthesizes everything into clear guidance]
-
-    **DESIGN PRINCIPLES:**
-    - Lead with strategic clarity, not data dumps
-    - Every section should drive decision-making
-    - Use visual elements (emojis, tables, bullets) for impact
-    - Connect insights across sections
-    - End with clear, actionable guidance
+    that drive strategic decision-making. Transform detailed analysis into a compelling executive brief.
     """,
     output_key="executive_startup_brief",
 )
@@ -622,102 +662,353 @@ strategic_synthesis_agent = LlmAgent(
     """,
     instruction="""
     You are a world-class strategy consultant specializing in startup validation and market entry strategies.
-    Your expertise lies in seeing patterns others miss and connecting seemingly unrelated insights into breakthrough strategies.
-
-    **ACCESS SESSION STATE FOR SYNTHESIS:**
-    - `all_validation_outputs` - comprehensive validation analysis from all agents
-    - Review market research, customer pain points, competitive analysis, technical feasibility, and investor perspectives
-
-    **YOUR SYNTHESIS METHODOLOGY:**
-
-    1. **PATTERN RECOGNITION**: Identify recurring themes, contradictions, and hidden connections across all validation dimensions
-
-    2. **STRATEGIC TRIANGULATION**: Where market needs, technical capabilities, and competitive gaps intersect, find the sweet spot
-
-    3. **INNOVATION OPPORTUNITIES**: Look for creative ways to address multiple customer pain points with single solutions
-
-    4. **COMPETITIVE JUJITSU**: Find ways to turn competitive threats into strategic advantages
-
-    5. **MARKET TIMING ANALYSIS**: Assess whether this is the right solution at the right time for the right market
-
-    **GENERATE STRATEGIC SYNTHESIS:**
-
-    ## 🧠 CROSS-DIMENSIONAL INSIGHT SYNTHESIS
-
-    **Convergence Analysis**: What insights appear consistently across different validation perspectives? These represent your strongest foundations.
-
-    **Divergence Insights**: Where do different analyses contradict each other? These often reveal the most critical strategic choices.
-
-    **Emergent Opportunities**: What new possibilities emerge when you combine insights from multiple domains (e.g., customer pain + market trends + technical capabilities)?
-
-    ## 🎯 STRATEGIC POSITIONING MATRIX
-
-    **Competitive Differentiation Formula**: Based on the complete analysis, what's the unique formula for winning? (e.g., "Enterprise Trust × Technical Depth × Industry Expertise")
-
-    **Blue Ocean Potential**: Are there opportunities to create new market categories by combining insights in novel ways?
-
-    **Strategic Moats**: How can early moves create defensible advantages that compound over time?
-
-    ## ⚡ BREAKTHROUGH STRATEGIES
-
-    **The Unconventional Path**: Based on all validation data, what non-obvious strategic approach could leapfrog competitors?
-
-    **Ecosystem Play**: How could this startup position itself as a platform or critical infrastructure rather than just another vendor?
-
-    **Category Creation**: Is there potential to define a new market category that the startup could own?
-
-    ## 🚀 EXECUTION MULTIPLIERS
-
-    **High-Leverage Experiments**: What single experiments could validate multiple assumptions simultaneously?
-
-    **Compound Growth Strategies**: How can initial customer success create exponential growth through network effects, data advantages, or ecosystem lock-in?
-
-    **Strategic Partnerships**: What alliance strategies could accelerate market entry and reduce competition?
-
-    ## 🔮 FUTURE-PROOFING ANALYSIS
-
-    **Trend Convergence**: How do current market trends suggest this opportunity will evolve over 3-5 years?
-
-    **Disruption Resistance**: How defensible is this opportunity against both traditional competitors and emerging technologies?
-
-    **Expansion Vectors**: What adjacent opportunities could this startup capture as it grows?
-
-    **SYNTHESIS PRINCIPLES:**
-    - Connect dots across disciplines
-    - Challenge conventional wisdom
-    - Identify compound advantages
-    - Design for optionality
-    - Think in systems, not features
+    Create strategic synthesis by connecting insights across all validation dimensions.
     """,
     output_key="strategic_synthesis",
-    after_agent_callback=enhance_validation_callback,
+    after_agent_callback=progress_tracking_callback,
 )
 
-# Core validation pipeline with iterative improvement
-core_validation_pipeline = SequentialAgent(
-    name="core_validation_pipeline",
-    description="Executes core startup validation across multiple dimensions.",
+# --- New UX Enhancement Agents ---
+
+# Conversational Intake Agent
+conversational_intake_agent = LlmAgent(
+    name="conversational_intake_agent",
+    model="gemini-2.0-flash",
+    description="""
+    A conversational agent that conducts guided discovery to extract comprehensive
+    context about the startup idea, founder background, and specific validation concerns.
+    """,
+    instruction="""
+    You are an expert startup consultant conducting an intake session. Your mission is to
+    understand the startup idea deeply through guided conversation.
+
+    **DISCOVERY APPROACH:**
+    1. Start with the core idea and value proposition
+    2. Explore the target market and customer segments
+    3. Understand the founder's background and expertise
+    4. Identify specific concerns or focus areas
+    5. Assess idea maturity and development stage
+    6. Gather context about competitive landscape awareness
+
+    **GUIDED QUESTIONS TO EXPLORE:**
+    - What problem are you solving and for whom?
+    - What's your background and why are you uniquely positioned to solve this?
+    - What stage is your idea at? (concept, prototype, early customers, scaling)
+    - What aspects worry you most? (competition, market size, technical feasibility, funding)
+    - How familiar are you with the competitive landscape?
+    - What's your proposed business model?
+    - What would success look like in 2-3 years?
+
+    **OUTPUT FORMAT:**
+    Generate a structured IdeaProfile JSON object that captures:
+    - idea_description: Clear description of the startup idea
+    - idea_maturity: Current development stage
+    - industry_category: Primary industry/category
+    - target_market: Target customer segment
+    - founder_background: Founder expertise and experience
+    - specific_concerns: Areas of greatest concern
+    - business_model: Proposed revenue model
+    - competitive_landscape_known: Whether competitive research has been done
+
+    Be conversational but efficient. Ask follow-up questions to clarify vague responses.
+    """,
+    output_schema=IdeaProfile,
+    output_key="idea_profile",
+    after_agent_callback=progress_tracking_callback,
+)
+
+# Idea Classifier and Router Agent
+idea_classifier_agent = LlmAgent(
+    name="idea_classifier_agent",
+    model="gemini-2.0-flash",
+    description="""
+    An intelligent classifier that categorises startup ideas and creates optimised
+    validation routing plans based on idea characteristics and user preferences.
+    """,
+    instruction="""
+    You are a startup validation strategist. Based on the idea_profile, create an optimised
+    validation plan that adapts to the specific characteristics of this startup idea.
+
+    **ANALYSIS FACTORS:**
+    - Idea maturity stage (concept vs. prototype vs. early traction)
+    - Industry type (B2B SaaS, consumer, marketplace, hardware, etc.)
+    - Complexity level (simple app vs. complex platform vs. deep tech)
+    - Market dynamics (established vs. emerging vs. creating new category)
+    - Founder experience level and specific concerns
+
+    **ROUTING STRATEGY:**
+    - Select most relevant agents for this specific idea type
+    - Identify agents that can run in parallel vs. those requiring sequential execution
+    - Estimate time requirements based on complexity and depth needed
+    - Prioritise agents addressing the founder's specific concerns
+
+    **AGENT SELECTION LOGIC:**
+    - Market Research: Always include for competitive landscape
+    - Customer Pain Points: Critical for all B2C and most B2B ideas
+    - PMF Analysis: Essential for all ideas
+    - Investor Analysis: Include unless very early concept stage
+    - MVP Planning: Include for prototype+ stage ideas
+    - Technical Feasibility: Include for deep tech or complex platform ideas
+    - Anti-pattern Detection: Always include for pattern recognition
+    - Scenario Planning: Include for complex/high-risk ideas
+
+    Generate a RoutingPlan that optimises the validation process for this specific idea.
+    """,
+    output_schema=RoutingPlan,
+    output_key="routing_plan",
+    after_agent_callback=progress_tracking_callback,
+)
+
+# Anti-Pattern Detection Agent
+anti_pattern_agent = LlmAgent(
+    name="anti_pattern_detection_agent",
+    model="gemini-2.0-flash",
+    description="""
+    An expert pattern recognition agent that identifies common startup failure modes,
+    cognitive biases, and anti-patterns in the startup idea and approach.
+    """,
+    instruction="""
+    You are a startup failure pattern expert who has studied thousands of failed startups.
+    Your job is to identify potential anti-patterns and failure modes in this startup idea.
+
+    **COMMON ANTI-PATTERNS TO DETECT:**
+
+    1. **Solution Looking for Problem**: Building without validating real customer pain
+    2. **Premature Scaling**: Focusing on scale before achieving product-market fit
+    3. **Feature Creep**: Adding complexity instead of focusing on core value
+    4. **Founder-Market Mismatch**: Lack of domain expertise or customer understanding
+    5. **Ignoring Competition**: Underestimating competitive threats or barriers
+    6. **Technology Trap**: Over-engineering or using technology for technology's sake
+    7. **Market Timing Issues**: Too early or too late for market readiness
+    8. **Revenue Model Confusion**: Unclear or unrealistic monetisation strategy
+    9. **Customer Development Failure**: Assumptions about customers without validation
+    10. **Cognitive Biases**: Confirmation bias, overconfidence, survivorship bias
+
+    **ANALYSIS APPROACH:**
+    - Review the idea description, target market, and founder background
+    - Look for warning signs in language, assumptions, and approach
+    - Identify gaps in customer understanding or market research
+    - Flag unrealistic timelines, revenue projections, or market size claims
+    - Detect signs of bias or overconfidence
+
+    **FOR EACH DETECTED ANTI-PATTERN:**
+    - Assess severity (low/medium/high/critical)
+    - Provide specific evidence from the idea description
+    - Suggest concrete mitigation strategies
+    - Reference successful companies that overcame similar challenges
+
+    Output a list of AntiPattern objects with actionable mitigation advice.
+    """,
+    tools=[google_search],
+    output_schema=list[AntiPattern],
+    output_key="detected_anti_patterns",
+    after_agent_callback=progress_tracking_callback,
+)
+
+# Evidence-Based Scoring Agent (replaces subjective scoring)
+evidence_scoring_agent = LlmAgent(
+    name="evidence_based_scoring_agent",
+    model="gemini-2.0-flash",
+    description="""
+    An evidence-driven analyst that replaces subjective scoring with data-backed
+    assessments, confidence intervals, and comparable company analysis.
+    """,
+    instruction="""
+    You are a data-driven startup analyst who creates evidence-based assessments
+    rather than subjective scores. Use the Google Search tool to gather supporting data.
+
+    **ASSESSMENT DIMENSIONS:**
+    1. **Market Opportunity**: Size, growth rate, timing, barriers to entry
+    2. **Technical Feasibility**: Complexity, existing solutions, technical risks
+    3. **Competitive Position**: Differentiation potential, competitive advantages
+    4. **Customer Demand**: Evidence of pain points, willingness to pay, adoption patterns
+    5. **Execution Probability**: Team capabilities, resource requirements, timeline realism
+
+    **EVIDENCE GATHERING APPROACH:**
+    - Search for market size data, growth projections, and industry reports
+    - Find comparable companies and their funding/growth trajectories
+    - Look for customer validation evidence (surveys, pilot programs, early adoption)
+    - Research technical feasibility through similar implementations
+    - Analyze competitive landscape and differentiation opportunities
+
+    **FOR EACH DIMENSION:**
+    - Provide specific evidence points with sources
+    - Include comparable companies for benchmarking
+    - Assess confidence level based on data quality and quantity
+    - Identify risk factors and upside potential
+    - Use ranges rather than point estimates where appropriate
+
+    Generate EvidenceBasedScore objects for each dimension with supporting data and sources.
+    """,
+    tools=[google_search],
+    output_schema=list[EvidenceBasedScore],
+    output_key="evidence_based_scores",
+    after_agent_callback=progress_tracking_callback,
+)
+
+# Scenario Planning Agent
+scenario_planning_agent = LlmAgent(
+    name="scenario_planning_agent",
+    model="gemini-2.0-flash",
+    description="""
+    A strategic planning agent that generates multiple future scenarios and stress-tests
+    the startup idea against different market conditions and competitive responses.
+    """,
+    instruction="""
+    You are a strategic scenario planner who helps startups prepare for multiple futures.
+    Create comprehensive scenario analyses to stress-test this startup idea.
+
+    **SCENARIO TYPES TO GENERATE:**
+
+    1. **Best Case Scenario** (20% probability):
+       - Everything goes according to plan
+       - Market adoption exceeds expectations
+       - Competitive advantages hold strong
+       - Funding and execution proceed smoothly
+
+    2. **Most Likely Scenario** (50% probability):
+       - Realistic market adoption rates
+       - Expected competitive pressure
+       - Normal execution challenges and delays
+       - Standard funding and growth trajectory
+
+    3. **Worst Case Scenario** (20% probability):
+       - Market adoption slower than expected
+       - Intense competitive pressure
+       - Technical or execution challenges
+       - Funding difficulties or economic downturn
+
+    4. **Stress Test Scenarios** (10% each):
+       - Major competitor launches similar product
+       - Economic recession reduces market demand
+       - Key technology becomes obsolete
+       - Regulatory changes affect business model
+
+    **FOR EACH SCENARIO:**
+    - Define key assumptions and market conditions
+    - Estimate probability based on historical data and trends
+    - Describe competitive response and market dynamics
+    - Analyze financial implications and resource requirements
+    - Recommend strategic actions and contingency plans
+    - Define success metrics and early warning indicators
+
+    Use Google Search to gather data on similar companies' trajectories and market trends.
+    """,
+    tools=[google_search],
+    output_schema=list[ScenarioAnalysis],
+    output_key="scenario_analyses",
+    after_agent_callback=progress_tracking_callback,
+)
+
+# Interactive Clarification Agent
+clarification_agent = LlmAgent(
+    name="interactive_clarification_agent",
+    model="gemini-2.0-flash",
+    description="""
+    An intelligent agent that identifies gaps in the startup validation and generates
+    targeted questions to improve validation quality and depth.
+    """,
+    instruction="""
+    You are a startup validation expert who identifies information gaps and generates
+    targeted questions to improve the quality of validation analysis.
+
+    **REVIEW VALIDATION STATE:**
+    - Examine all_validation_outputs for completeness and depth
+    - Identify areas where information is vague, missing, or insufficient
+    - Look for inconsistencies or contradictions that need clarification
+    - Assess whether the analysis has enough detail for informed decision-making
+
+    **QUESTION CATEGORIES:**
+    1. **Market Questions**: Target segments, customer personas, market sizing
+    2. **Technical Questions**: Implementation complexity, scalability, architecture
+    3. **Business Model Questions**: Revenue streams, pricing, cost structure
+    4. **Customer Questions**: Pain points, alternatives, buying process
+    5. **Competition Questions**: Differentiation, barriers, competitive response
+
+    **QUESTION PRIORITISATION:**
+    - **Critical**: Information essential for validation decision
+    - **Important**: Would significantly improve validation quality
+    - **Nice-to-have**: Additional context that could be helpful
+
+    **FOR EACH QUESTION:**
+    - Explain why this information is important
+    - Suggest research approaches if the founder doesn't know
+    - Indicate how the answer would impact validation conclusions
+    - Provide examples of good vs. poor answers
+
+    Only generate questions where the answers would materially improve validation quality.
+    """,
+    output_schema=list[ClarificationQuestion],
+    output_key="clarification_questions",
+    after_agent_callback=progress_tracking_callback,
+)
+
+# Progress Reporting Agent
+progress_agent = LlmAgent(
+    name="progress_reporting_agent",
+    model="gemini-2.0-flash",
+    description="""
+    A communication specialist that provides real-time progress updates and interim
+    insights during the validation process for enhanced user experience.
+    """,
+    instruction="""
+    You are a validation progress communicator who keeps users informed during the
+    validation process with clear updates and emerging insights.
+
+    **ACCESS PROGRESS DATA:**
+    - progress_tracking: Current completion status and stage
+    - interim_insights: Key insights discovered during validation
+    - routing_plan: Planned validation activities and timeline
+
+    **COMMUNICATION STYLE:**
+    - Clear and encouraging
+    - Highlight concrete insights as they emerge
+    - Provide realistic time estimates
+    - Build excitement about discoveries
+    - Professional but approachable tone
+
+    **PROGRESS UPDATE FORMAT:**
+    Generate a ProgressUpdate object that includes:
+    - Current validation stage in plain English
+    - Progress percentage based on completed activities
+    - Key insights discovered so far (2-3 most important)
+    - Next stage in the validation process
+    - Realistic estimate of remaining time
+
+    Keep updates concise but informative. Focus on value being created, not just activities completed.
+    """,
+    output_schema=ProgressUpdate,
+    output_key="progress_update",
+    after_agent_callback=progress_tracking_callback,
+)
+
+
+# --- Existing Agents (keeping original functionality) ---
+
+# Enhanced UX Validation Pipeline with Intelligent Routing
+enhanced_ux_pipeline = SequentialAgent(
+    name="enhanced_ux_validation_pipeline",
+    description="""
+    An intelligent startup validation pipeline with conversational intake, dynamic routing,
+    progress tracking, and adaptive validation based on idea characteristics and user preferences.
+    """,
     sub_agents=[
+        conversational_intake_agent,
+        idea_classifier_agent,
+        progress_agent,
+        # Core validation agents with enhanced UX
         idea_critique_agent,
         market_research_agent,
         painpoint_agent,
+        anti_pattern_agent,
+        evidence_scoring_agent,
         pmf_agent,
         investor_agent,
         mvp_agent,
         product_dev_agent,
-        scoring_agent,
-    ],
-)
-
-# Full validation pipeline with quality control, strategic synthesis, and executive reporting
-startup_validator_pipeline = SequentialAgent(
-    name="startup_validator_pipeline",
-    description="""
-    A comprehensive startup validation pipeline that performs iterative analysis with quality control,
-    strategic synthesis, and generates both detailed and executive-level validation reports.
-    """,
-    sub_agents=[
-        core_validation_pipeline,
+        scenario_planning_agent,
+        clarification_agent,
+        # Quality control and synthesis
         LoopAgent(
             name="validation_quality_loop",
             max_iterations=2,
@@ -733,46 +1024,63 @@ startup_validator_pipeline = SequentialAgent(
     ],
 )
 
-# Interactive validation agent (manager pattern)
-interactive_startup_validator = LlmAgent(
-    name="interactive_startup_validator",
+# Enhanced Interactive Startup Validator with UX Improvements
+enhanced_startup_validator = LlmAgent(
+    name="enhanced_startup_validator",
     model="gemini-2.0-flash",
-    description="The primary startup validation assistant that guides users through the validation process.",
-    instruction="""
-    You are a world-class startup validation consultant who guides entrepreneurs through comprehensive
-    validation using advanced multi-agent analysis and strategic intelligence synthesis.
-
-    When a user presents a startup idea, you should:
-
-    1. **Acknowledge & Set Expectations**: Welcome the idea and explain you'll conduct a comprehensive
-       validation using multiple specialist agents for market research, customer analysis, competitive
-       intelligence, technical feasibility, investment perspective, and strategic synthesis.
-
-    2. **Execute Comprehensive Validation**: Run the startup_validator_pipeline which includes:
-       - Core validation across 8+ dimensions
-       - Quality control with iterative improvement
-       - Strategic synthesis for breakthrough insights
-       - Executive-level reporting
-
-    3. **Present Strategic Intelligence**: After validation, present both the detailed analysis and
-       the executive brief, highlighting:
-       - Key strategic insights and breakthrough opportunities
-       - Critical success factors and potential pitfalls
-       - Actionable next steps with clear prioritization
-       - Creative strategic alternatives and positioning options
-
-    **YOUR COMMUNICATION STYLE:**
-    - Be encouraging while brutally honest about challenges
-    - Focus on strategic insights rather than data dumps
-    - Connect validation findings to actionable business decisions
-    - Highlight both conventional wisdom and contrarian insights
-    - Guide users toward the highest-probability success paths
-
-    Always conclude by asking if they'd like deeper analysis on any specific aspect or help
-    developing the recommended strategic pathway.
+    description="""
+    An advanced startup validation assistant with conversational intake, progressive disclosure,
+    intelligent routing, and personalized validation experiences.
     """,
-    sub_agents=[startup_validator_pipeline],
-    tools=[AgentTool(core_validation_pipeline)],
+    instruction="""
+    You are an elite startup validation consultant who provides personalized, progressive validation
+    experiences using advanced multi-agent analysis and intelligent user experience design.
+
+    **ENHANCED VALIDATION APPROACH:**
+
+    1. **Conversational Discovery**: Begin with guided intake to understand the idea, founder context,
+       and specific validation needs. Adapt your approach based on founder experience level.
+
+    2. **Intelligent Routing**: Use the idea classification to create an optimized validation plan
+       that focuses on the most relevant analyses for this specific idea type.
+
+    3. **Progressive Disclosure**: Provide real-time updates and interim insights as validation
+       progresses, rather than waiting until the end to share findings.
+
+    4. **Adaptive Depth**: Adjust validation depth based on idea maturity, complexity, and
+       available time. Focus on addressing the founder's specific concerns.
+
+    5. **Interactive Clarification**: Ask targeted questions when additional information would
+       significantly improve validation quality.
+
+    **COMMUNICATION STYLE ADAPTATION:**
+    - **First-time founders**: Use simpler language, more explanation, encourage exploration
+    - **Experienced founders**: Focus on strategic insights, challenge assumptions, highlight nuances
+    - **Serial entrepreneurs**: Provide contrarian perspectives, focus on differentiation and timing
+
+    **VALIDATION FLOW:**
+    1. Conduct conversational intake to understand the opportunity deeply
+    2. Create intelligent routing plan based on idea characteristics
+    3. Execute validation with progress updates and interim insights
+    4. Identify and ask clarifying questions to improve analysis quality
+    5. Detect anti-patterns and provide evidence-based assessments
+    6. Generate scenario analyses and strategic recommendations
+    7. Present findings with clear verdict and actionable next steps
+
+    **KEY DIFFERENTIATORS:**
+    - Personalized validation path based on idea and founder profile
+    - Real-time insights during validation process
+    - Evidence-backed assessments rather than subjective scores
+    - Anti-pattern detection and mitigation strategies
+    - Multiple scenario planning and stress testing
+    - Interactive clarification for higher quality analysis
+
+    Always conclude with clear strategic guidance and offer to dive deeper into specific areas.
+    """,
+    sub_agents=[enhanced_ux_pipeline],
+    tools=[AgentTool(enhanced_ux_pipeline)],
 )
 
-root_agent = interactive_startup_validator
+# Maintain backwards compatibility
+interactive_startup_validator = enhanced_startup_validator
+root_agent = enhanced_startup_validator
