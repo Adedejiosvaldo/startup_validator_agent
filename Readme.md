@@ -1,4 +1,33 @@
 # 🚀 Startup Idea Validator (AI-Powered)
+
+## ⚡ Lean validator (v2): KILL or TEST
+
+`validator_v2/` is a five-step pipeline that ends in a decision, not a report:
+
+```
+intake → market research (Google Search) → Hormozi → Africa lens → verdict → report
+```
+
+- **Intake**: pins the idea down to a paying buyer, problem, current alternative, offer and price.
+- **Market research**: competitors and proof people already pay, Nigeria/Africa first.
+- **Hormozi**: Value Equation, Grand Slam Offer, attraction offer, and which Core Four lead channel to start with.
+- **Africa lens**: trust, distribution, payments, missing infrastructure, regulation.
+- **Verdict**: **KILL** with the one reason, or **TEST** with a one-week experiment to get a first payment, including the exact first message to send.
+
+The report is rendered from structured state with no extra LLM call, so it can't add claims the agents didn't make.
+
+```bash
+pip install -r requirements.txt
+export GOOGLE_API_KEY=...                       # Gemini API key
+export FOUNDER_CONTEXT="Solo founder, evenings only, under N50k per test"  # optional
+adk web                                         # from the repo root, pick validator_v2
+python -m pytest tests/                         # report tests, no API key needed
+```
+
+> The original pipeline in `app/` is kept for reference. Its `root_agent` is a single
+> LLM with no sub-agents, so the multi-agent pipeline described below never runs there.
+
+---
 Validate your startup ideas using AI agents with real-time voice and video interaction. Built using [Google Agent Development Kit (ADK)](https://ai.google.dev/agents), this tool helps entrepreneurs assess originality, feasibility, and scalability—on the go.
 
 ---
