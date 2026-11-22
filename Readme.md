@@ -1,4 +1,49 @@
 # 🚀 Startup Idea Validator (AI-Powered)
+
+## ⚡ Lean validator (v2): KILL or TEST
+
+`validator_v2/` is a five-step pipeline that ends in a decision, not a report:
+
+```
+history → intake → market research (Google Search) → Hormozi → Africa lens
+        → debate (case to kill ‖ case to test) → verdict ×3 → majority vote → report
+```
+
+- **Intake**: pins the idea down to a paying buyer, problem, current alternative, offer and price.
+- **Market research**: competitors and proof people already pay, Nigeria/Africa first.
+- **Hormozi**: Value Equation, Grand Slam Offer, attraction offer, and which Core Four lead channel to start with.
+- **Africa lens**: trust, distribution, payments, missing infrastructure, regulation.
+- **Debate**: one agent makes the strongest case to kill, another the strongest case to test. The case to kill wins unless there's evidence people already pay.
+- **Verdict**: **KILL** with the one reason, or **TEST** with a one-week experiment to get a first payment, including the exact first message to send. It runs 3 times independently and takes the majority, so you see whether the decision is solid (3/3) or a judgement call (2/3). Ties go to KILL.
+
+The report is rendered from structured state with no extra LLM call, so it can't add claims the agents didn't make.
+
+### The feedback loop
+
+Every run is logged to `data/validations.jsonl` (git-ignored). After you run a test, record what actually happened:
+
+```bash
+python -m validator_v2.outcomes list
+python -m validator_v2.outcomes record <run_id> --result pass --paid 3 --contacted 20 --notes "paid by transfer"
+python -m validator_v2.outcomes stats    # how often TEST verdicts actually passed
+```
+
+Your last 10 recorded results are fed into every future verdict, so it raises the bar for ideas, buyers or prices that already failed and reuses what worked.
+
+Settings: `VERDICT_RUNS` (default 3), `VALIDATION_LOG`, `VALIDATOR_MODEL`, `FOUNDER_CONTEXT`.
+
+```bash
+pip install -r requirements.txt
+export GOOGLE_API_KEY=...                       # Gemini API key
+export FOUNDER_CONTEXT="Solo founder, evenings only, under N50k per test"  # optional
+adk web                                         # from the repo root, pick validator_v2
+python -m pytest tests/                         # report tests, no API key needed
+```
+
+> The original pipeline in `app/` is kept for reference. Its `root_agent` is a single
+> LLM with no sub-agents, so the multi-agent pipeline described below never runs there.
+
+---
 Validate your startup ideas using AI agents with real-time voice and video interaction. Built using [Google Agent Development Kit (ADK)](https://ai.google.dev/agents), this tool helps entrepreneurs assess originality, feasibility, and scalability—on the go.
 
 ---
